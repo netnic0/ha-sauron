@@ -1,4 +1,4 @@
-"""Tests for the coordinator _parse_consumption helper (pure-library, no HA)."""
+"""Tests for the coordinator parse helpers (pure-library, no HA)."""
 
 from __future__ import annotations
 
@@ -6,7 +6,11 @@ from datetime import UTC, datetime
 
 import pytest
 
-from custom_components.sauron.coordinator import _parse_consumption
+from custom_components.sauron.coordinator import (
+    _extract_daily_liters,
+    _parse_consumption,
+    _parse_last_index,
+)
 from custom_components.sauron.api.exceptions import SauronNoDataError
 
 
@@ -14,13 +18,86 @@ _NOW = datetime(2026, 6, 16, 10, 0, 0, tzinfo=UTC)
 _SUB = "100030690002033754"
 
 
+class TestParseLastIndex:
+    """Tests for the real /meter_indexes/last parser."""
+
+    def test_nominal(self) -> None:
+        raw = {"readingDate": "2026-06-15T00:00:00", "indexValue": 1234.567}
+        data = _parse_last_index(_SUB, raw, _NOW)
+        assert data.latest_reading.value_m3 == 1234.567
+        assert str(data.latest_reading.reading_date) == "2026-06-15"
+
+    def test_missing_index_value_raises(self) -> None:
+        with pytest.raises(SauronNoDataError, match="indexValue missing"):
+            _parse_last_index(_SUB, {"readingDate": "2026-06-15"}, _NOW)
+
+    def test_non_dict_raises(self) -> None:
+        with pytest.raises(SauronNoDataError):
+            _parse_last_index(_SUB, [], _NOW)  # type: ignore[arg-type]
+
+    def test_bad_date_falls_back_to_fetched_at(self) -> None:
+        raw = {"indexValue": 100.0, "readingDate": "not-a-date"}
+        data = _parse_last_index(_SUB, raw, _NOW)
+        assert data.latest_reading.reading_date == _NOW.date()
+
+    def test_integer_index_value(self) -> None:
+        raw = {"readingDate": "2026-06-15", "indexValue": 2000}
+        data = _parse_last_index(_SUB, raw, _NOW)
+        assert data.latest_reading.value_m3 == 2000.0
+
+
+class TestExtractDailyLiters:
+    """Tests for the weekly consumptions daily extractor."""
+
+    def test_extracts_last_day_entry(self) -> None:
+        raw = {
+            "consumptions": [
+                {"startDate": "2026-06-14 00:00:00", "value": 0.072, "rangeType": "Day"},
+                {"startDate": "2026-06-15 00:00:00", "value": 0.085, "rangeType": "Day"},
+            ]
+        }
+        assert _extract_daily_liters(raw) == pytest.approx(85.0, abs=0.5)
+
+    def test_ignores_non_day_entries(self) -> None:
+        raw = {
+            "consumptions": [
+                {"startDate": "2026-W24", "value": 0.612, "rangeType": "Week"},
+            ]
+        }
+        assert _extract_daily_liters(raw) is None
+
+    def test_negative_value_returns_none(self) -> None:
+        raw = {
+            "consumptions": [
+                {"startDate": "2026-06-15 00:00:00", "value": -0.1, "rangeType": "Day"},
+            ]
+        }
+        assert _extract_daily_liters(raw) is None
+
+    def test_empty_consumptions(self) -> None:
+        assert _extract_daily_liters({"consumptions": []}) is None
+
+    def test_missing_consumptions_key(self) -> None:
+        assert _extract_daily_liters({}) is None
+
+    def test_converts_m3_to_liters(self) -> None:
+        raw = {
+            "consumptions": [
+                {"startDate": "2026-06-15 00:00:00", "value": 0.150, "rangeType": "Day"},
+            ]
+        }
+        assert _extract_daily_liters(raw) == pytest.approx(150.0, abs=0.5)
+
+
 class TestParseConsumptionList:
+    """Legacy list-based parser (kept for backward compat with existing tests)."""
+
     def test_single_entry_list(self) -> None:
         raw = [{"index": 1234.567, "date": "2026-06-15"}]
         data = _parse_consumption(_SUB, raw, _NOW)
         assert data.latest_reading.value_m3 == 1234.567
         assert str(data.latest_reading.reading_date) == "2026-06-15"
-        assert data.daily_liters is None  # only 1 entry, no delta
+        assert data.daily_liters is None
 
     def test_two_entries_computes_daily(self) -> None:
         raw = [
@@ -28,11 +105,9 @@ class TestParseConsumptionList:
             {"index": 1234.567, "date": "2026-06-15"},
         ]
         data = _parse_consumption(_SUB, raw, _NOW)
-        assert data.latest_reading.value_m3 == 1234.567
-        assert data.daily_liters == pytest.approx(1567.0, abs=1.0)  # 1.567 m3 * 1000
+        assert data.daily_liters == pytest.approx(1567.0, abs=1.0)
 
     def test_negative_delta_ignored(self) -> None:
-        """A negative delta (meter reset) must not yield a negative daily consumption."""
         raw = [
             {"index": 1234.567, "date": "2026-06-14"},
             {"index": 100.000, "date": "2026-06-15"},
@@ -48,7 +123,7 @@ class TestParseConsumptionList:
         ]
         data = _parse_consumption(_SUB, raw, _NOW)
         assert data.latest_reading.value_m3 == 102.5
-        assert data.daily_liters == pytest.approx(1500.0, abs=1.0)  # 1.5 m3
+        assert data.daily_liters == pytest.approx(1500.0, abs=1.0)
 
 
 class TestParseConsumptionDict:
@@ -63,7 +138,7 @@ class TestParseConsumptionDict:
         assert data.daily_liters is None
 
     def test_dict_fallback_date_from_fetched_at(self) -> None:
-        raw = {"value": 500.0}  # no date field
+        raw = {"value": 500.0}
         data = _parse_consumption(_SUB, raw, _NOW)
         assert data.latest_reading.reading_date == _NOW.date()
 

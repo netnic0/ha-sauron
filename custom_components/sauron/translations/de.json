@@ -1,0 +1,68 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "SAUR-Konto verbinden",
+        "description": "Geben Sie Ihre SAUR-Kundenkonto-Anmeldedaten ein (wie auf mon-espace.saurclient.fr).",
+        "data": {
+          "login": "E-Mail-Adresse",
+          "password": "Passwort"
+        },
+        "data_description": {
+          "login": "Ihre SAUR-Login-E-Mail.",
+          "password": "Ihr SAUR-Passwort. Wird lokal gespeichert und nicht weitergegeben."
+        }
+      },
+      "reauth_confirm": {
+        "title": "SAURon erneut authentifizieren",
+        "description": "Ihre SAUR-Anmeldedaten sind für Abonnement **{subscription_id}** nicht mehr gültig. Geben Sie neue Anmeldedaten ein.",
+        "data": {
+          "login": "E-Mail-Adresse",
+          "password": "Passwort"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Ungültige Anmeldedaten. Überprüfen Sie E-Mail und Passwort.",
+      "cannot_connect": "SAUR-API nicht erreichbar. Überprüfen Sie Ihre Internetverbindung.",
+      "wrong_account": "Diese Anmeldedaten gehören zu einem anderen SAUR-Konto.",
+      "unknown": "Unerwarteter Fehler. Überprüfen Sie die Home Assistant-Protokolle."
+    },
+    "abort": {
+      "already_configured": "Dieses SAUR-Abonnement ist bereits konfiguriert.",
+      "reauth_successful": "Erneute Authentifizierung erfolgreich."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "SAURon-Optionen",
+        "data": {
+          "scan_interval_h": "Abrufintervall (Stunden)",
+          "stale_data_threshold_h": "Warnschwelle für veraltete Daten (Stunden)"
+        },
+        "data_description": {
+          "scan_interval_h": "Wie oft die SAUR-API abgefragt wird. SAUR aktualisiert Daten einmal täglich (J-1), daher sind Werte unter 4h selten sinnvoll.",
+          "stale_data_threshold_h": "HA-Benachrichtigung auslösen, wenn der letzte Zählerstand älter als diese Stundenzahl ist."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "last_index": { "name": "Wasserstand" },
+      "last_index_date": { "name": "Datum letzte Ablesung" },
+      "daily_liters": { "name": "Tagesverbrauch" },
+      "weekly_m3": { "name": "Wochenverbrauch" },
+      "monthly_m3": { "name": "Monatsverbrauch" },
+      "yearly_m3": { "name": "Jahresverbrauch" },
+      "data_freshness_hours": { "name": "Datenalter" }
+    }
+  },
+  "issues": {
+    "stale_data": {
+      "title": "Veraltete SAUR-Wasserdaten",
+      "description": "Die letzte Ablesung für Abonnement `{subscription_id}` ist **{age_h} Stunden** alt."
+    }
+  }
+}

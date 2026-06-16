@@ -1,0 +1,68 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Conectar cuenta SAUR",
+        "description": "Introduzca sus credenciales del portal de cliente SAUR (igual que en mon-espace.saurclient.fr).",
+        "data": {
+          "login": "Dirección de correo",
+          "password": "Contraseña"
+        },
+        "data_description": {
+          "login": "Su email de acceso al portal SAUR.",
+          "password": "Su contraseña SAUR. Almacenada localmente y nunca compartida."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reautenticación SAURon",
+        "description": "Sus credenciales SAUR ya no son válidas para la suscripción **{subscription_id}**. Introduzca nuevas credenciales.",
+        "data": {
+          "login": "Dirección de correo",
+          "password": "Contraseña"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Credenciales inválidas. Compruebe su email y contraseña.",
+      "cannot_connect": "No se puede contactar con la API SAUR. Compruebe su conexión a Internet.",
+      "wrong_account": "Estas credenciales pertenecen a otra cuenta SAUR.",
+      "unknown": "Error inesperado. Consulte los registros de Home Assistant."
+    },
+    "abort": {
+      "already_configured": "Esta suscripción SAUR ya está configurada.",
+      "reauth_successful": "Reautenticación exitosa."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opciones SAURon",
+        "data": {
+          "scan_interval_h": "Intervalo de consulta (horas)",
+          "stale_data_threshold_h": "Umbral de alerta datos obsoletos (horas)"
+        },
+        "data_description": {
+          "scan_interval_h": "Con qué frecuencia consultar la API SAUR. SAUR actualiza los datos una vez al día (J-1), por lo que valores inferiores a 4h raramente son útiles.",
+          "stale_data_threshold_h": "Generar una alerta de HA si la última lectura del contador es más antigua que este número de horas."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "last_index": { "name": "Índice de agua" },
+      "last_index_date": { "name": "Fecha última lectura" },
+      "daily_liters": { "name": "Consumo diario" },
+      "weekly_m3": { "name": "Consumo semanal" },
+      "monthly_m3": { "name": "Consumo mensual" },
+      "yearly_m3": { "name": "Consumo anual" },
+      "data_freshness_hours": { "name": "Antigüedad datos" }
+    }
+  },
+  "issues": {
+    "stale_data": {
+      "title": "Datos SAUR obsoletos",
+      "description": "La última lectura de la suscripción `{subscription_id}` tiene **{age_h} horas** de antigüedad."
+    }
+  }
+}
