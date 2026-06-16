@@ -1,0 +1,82 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect your SAUR account",
+        "description": "Enter your SAUR customer portal credentials (same as mon-espace.saurclient.fr).",
+        "data": {
+          "login": "Email address",
+          "password": "Password"
+        },
+        "data_description": {
+          "login": "Your SAUR customer portal login email.",
+          "password": "Your SAUR customer portal password. Stored locally and never shared."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate SAURon",
+        "description": "Your SAUR credentials are no longer valid for subscription **{subscription_id}**. Enter new credentials.",
+        "data": {
+          "login": "Email address",
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid credentials. Check your email and password.",
+      "cannot_connect": "Unable to reach the SAUR API. Check your internet connection.",
+      "wrong_account": "These credentials belong to a different SAUR account.",
+      "unknown": "Unexpected error. Check the Home Assistant logs."
+    },
+    "abort": {
+      "already_configured": "[%key:common::config_flow::abort::already_configured_device%]",
+      "reauth_successful": "Re-authentication successful."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "SAURon options",
+        "data": {
+          "scan_interval_h": "Polling interval (hours)",
+          "stale_data_threshold_h": "Stale data alert threshold (hours)"
+        },
+        "data_description": {
+          "scan_interval_h": "How often to query the SAUR API. SAUR updates data once per day (J-1), so values below 4h are rarely useful.",
+          "stale_data_threshold_h": "Raise a Home Assistant alert if the latest meter reading is older than this many hours."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "last_index": {
+        "name": "Water index"
+      },
+      "last_index_date": {
+        "name": "Last reading date"
+      },
+      "daily_liters": {
+        "name": "Daily consumption"
+      },
+      "weekly_m3": {
+        "name": "Weekly consumption"
+      },
+      "monthly_m3": {
+        "name": "Monthly consumption"
+      },
+      "yearly_m3": {
+        "name": "Yearly consumption"
+      },
+      "data_freshness_hours": {
+        "name": "Data age"
+      }
+    }
+  },
+  "issues": {
+    "stale_data": {
+      "title": "Stale SAUR water data",
+      "description": "The latest reading for subscription `{subscription_id}` is **{age_h} hours** old. The SAUR API may be unavailable or the meter may not be transmitting. Check your SAUR customer portal."
+    }
+  }
+}

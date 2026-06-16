@@ -1,0 +1,68 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connecter votre compte SAUR",
+        "description": "Entrez vos identifiants du portail client SAUR (identiques à mon-espace.saurclient.fr).",
+        "data": {
+          "login": "Adresse email",
+          "password": "Mot de passe"
+        },
+        "data_description": {
+          "login": "Votre email de connexion au portail SAUR.",
+          "password": "Votre mot de passe SAUR. Stocké localement, jamais transmis."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-authentification SAURon",
+        "description": "Vos identifiants SAUR ne sont plus valides pour l'abonnement **{subscription_id}**. Entrez de nouveaux identifiants.",
+        "data": {
+          "login": "Adresse email",
+          "password": "Mot de passe"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Identifiants invalides. Vérifiez votre email et mot de passe.",
+      "cannot_connect": "Impossible de joindre l'API SAUR. Vérifiez votre connexion internet.",
+      "wrong_account": "Ces identifiants appartiennent à un autre compte SAUR.",
+      "unknown": "Erreur inattendue. Consultez les journaux Home Assistant."
+    },
+    "abort": {
+      "already_configured": "Cet abonnement SAUR est déjà configuré.",
+      "reauth_successful": "Re-authentification réussie."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Options SAURon",
+        "data": {
+          "scan_interval_h": "Intervalle de polling (heures)",
+          "stale_data_threshold_h": "Seuil d'alerte données obsolètes (heures)"
+        },
+        "data_description": {
+          "scan_interval_h": "Fréquence d'interrogation de l'API SAUR. SAUR met à jour les données une fois par jour (J-1), donc en dessous de 4h c'est rarement utile.",
+          "stale_data_threshold_h": "Déclencher une alerte HA si la dernière lecture du compteur est plus ancienne que ce nombre d'heures."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "last_index": { "name": "Index eau" },
+      "last_index_date": { "name": "Date dernier relevé" },
+      "daily_liters": { "name": "Consommation journalière" },
+      "weekly_m3": { "name": "Consommation hebdomadaire" },
+      "monthly_m3": { "name": "Consommation mensuelle" },
+      "yearly_m3": { "name": "Consommation annuelle" },
+      "data_freshness_hours": { "name": "Âge des données" }
+    }
+  },
+  "issues": {
+    "stale_data": {
+      "title": "Données SAUR obsolètes",
+      "description": "Le dernier relevé de l'abonnement `{subscription_id}` date de **{age_h} heures**. L'API SAUR est peut-être indisponible ou le compteur ne remonte plus de données. Vérifiez votre espace client SAUR."
+    }
+  }
+}

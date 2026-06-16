@@ -1,0 +1,131 @@
+"""Sensor platform for the SAURon integration."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorEntityDescription,
+    SensorStateClass,
+)
+from homeassistant.const import EntityCategory, UnitOfVolume
+
+from .const import DOMAIN
+from .entity import SauronMeterEntity
+
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigEntry
+    from homeassistant.core import HomeAssistant
+    from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
+    from .coordinator import SauronCoordinator
+
+PARALLEL_UPDATES = 0
+
+METER_SENSORS: tuple[SensorEntityDescription, ...] = (
+    SensorEntityDescription(
+        key="last_index",
+        translation_key="last_index",
+        device_class=SensorDeviceClass.WATER,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        native_unit_of_measurement=UnitOfVolume.CUBIC_METERS,
+        suggested_display_precision=3,
+    ),
+    SensorEntityDescription(
+        key="last_index_date",
+        translation_key="last_index_date",
+        device_class=SensorDeviceClass.DATE,
+    ),
+    SensorEntityDescription(
+        key="daily_liters",
+        translation_key="daily_liters",
+        device_class=SensorDeviceClass.WATER,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfVolume.LITERS,
+        suggested_display_precision=0,
+    ),
+    SensorEntityDescription(
+        key="weekly_m3",
+        translation_key="weekly_m3",
+        device_class=SensorDeviceClass.WATER,
+        state_class=SensorStateClass.TOTAL,
+        native_unit_of_measurement=UnitOfVolume.CUBIC_METERS,
+        suggested_display_precision=3,
+    ),
+    SensorEntityDescription(
+        key="monthly_m3",
+        translation_key="monthly_m3",
+        device_class=SensorDeviceClass.WATER,
+        state_class=SensorStateClass.TOTAL,
+        native_unit_of_measurement=UnitOfVolume.CUBIC_METERS,
+        suggested_display_precision=3,
+    ),
+    SensorEntityDescription(
+        key="yearly_m3",
+        translation_key="yearly_m3",
+        device_class=SensorDeviceClass.WATER,
+        state_class=SensorStateClass.TOTAL,
+        native_unit_of_measurement=UnitOfVolume.CUBIC_METERS,
+        suggested_display_precision=3,
+    ),
+    SensorEntityDescription(
+        key="data_freshness_hours",
+        translation_key="data_freshness_hours",
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="h",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        suggested_display_precision=1,
+    ),
+)
+
+
+class SauronSensor(SauronMeterEntity, SensorEntity):
+    """A SAURon sensor entity backed by a SauronData snapshot."""
+
+    entity_description: SensorEntityDescription
+
+    def __init__(
+        self, coordinator: SauronCoordinator, description: SensorEntityDescription
+    ) -> None:
+        super().__init__(coordinator, translation_key=description.translation_key or description.key)
+        self.entity_description = description
+
+    @property
+    def native_value(self) -> float | str | None:
+        data = self.coordinator.data
+        key = self.entity_description.key
+
+        if key == "last_index":
+            return data.latest_reading.value_m3
+        if key == "last_index_date":
+            return data.latest_reading.reading_date.isoformat()
+        if key == "daily_liters":
+            return data.daily_liters
+        if key == "weekly_m3":
+            return data.weekly_m3
+        if key == "monthly_m3":
+            return data.monthly_m3
+        if key == "yearly_m3":
+            return data.yearly_m3
+        if key == "data_freshness_hours":
+            from datetime import UTC, datetime
+            now = datetime.now(UTC)
+            delta = now - datetime.combine(
+                data.latest_reading.reading_date,
+                datetime.min.time(),
+                tzinfo=UTC,
+            )
+            return round(delta.total_seconds() / 3600, 1)
+        return None
+
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Register sensor entities."""
+    coordinator: SauronCoordinator = hass.data[DOMAIN][entry.entry_id]
+    async_add_entities(SauronSensor(coordinator, desc) for desc in METER_SENSORS)

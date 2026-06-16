@@ -1,0 +1,13 @@
+{
+  "domain": "sauron",
+  "name": "SAURon",
+  "version": "0.1.0",
+  "documentation": "https://github.com/netnic0/ha-sauron",
+  "issue_tracker": "https://github.com/netnic0/ha-sauron/issues",
+  "codeowners": ["@netnic0"],
+  "requirements": ["aiohttp>=3.9.0"],
+  "iot_class": "cloud_polling",
+  "quality_scale": "bronze",
+  "config_flow": true,
+  "single_config_entry": false
+}
