@@ -8,6 +8,8 @@ import pytest
 
 from custom_components.sauron.coordinator import (
     _extract_daily_liters,
+    _extract_period_m3,
+    _extract_week_total_m3,
     _parse_consumption,
     _parse_last_index,
 )
@@ -157,3 +159,50 @@ class TestParseConsumptionErrors:
     def test_non_list_non_dict_raises(self) -> None:
         with pytest.raises(SauronNoDataError):
             _parse_consumption(_SUB, None, _NOW)  # type: ignore[arg-type]
+
+
+class TestExtractWeekTotalM3:
+    def test_sums_all_day_entries(self) -> None:
+        raw = {
+            "consumptions": [
+                {"startDate": "2026-06-10 00:00:00", "value": 0.080, "rangeType": "Day"},
+                {"startDate": "2026-06-11 00:00:00", "value": 0.090, "rangeType": "Day"},
+                {"startDate": "2026-06-12 00:00:00", "value": 0.072, "rangeType": "Day"},
+            ]
+        }
+        result = _extract_week_total_m3(raw)
+        assert result == pytest.approx(0.242, abs=0.001)
+
+    def test_ignores_non_day_entries(self) -> None:
+        raw = {"consumptions": [{"value": 1.5, "rangeType": "Week"}]}
+        assert _extract_week_total_m3(raw) is None
+
+    def test_empty_returns_none(self) -> None:
+        assert _extract_week_total_m3({}) is None
+
+
+class TestExtractPeriodM3:
+    def test_sums_consumptions_list(self) -> None:
+        raw = {
+            "consumptions": [
+                {"value": 2.5, "rangeType": "Month"},
+                {"value": 3.1, "rangeType": "Month"},
+            ]
+        }
+        result = _extract_period_m3(raw)
+        assert result == pytest.approx(5.6, abs=0.001)
+
+    def test_single_value_fallback(self) -> None:
+        raw = {"total": 18.5}
+        assert _extract_period_m3(raw) == pytest.approx(18.5, abs=0.001)
+
+    def test_empty_consumptions_uses_value_key(self) -> None:
+        raw = {"consumptions": [], "value": 12.3}
+        assert _extract_period_m3(raw) == pytest.approx(12.3, abs=0.001)
+
+    def test_all_negative_returns_zero(self) -> None:
+        raw = {"consumptions": [{"value": -1.0}, {"value": -2.0}]}
+        assert _extract_period_m3(raw) == pytest.approx(0.0, abs=0.001)
+
+    def test_no_data_returns_none(self) -> None:
+        assert _extract_period_m3({}) is None

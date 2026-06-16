@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, time
 from typing import TYPE_CHECKING
 
 from homeassistant.components.sensor import (
@@ -110,11 +111,10 @@ class SauronSensor(SauronMeterEntity, SensorEntity):
         if key == "yearly_m3":
             return data.yearly_m3
         if key == "data_freshness_hours":
-            from datetime import UTC, datetime
             now = datetime.now(UTC)
             delta = now - datetime.combine(
                 data.latest_reading.reading_date,
-                datetime.min.time(),
+                time.min,
                 tzinfo=UTC,
             )
             return round(delta.total_seconds() / 3600, 1)

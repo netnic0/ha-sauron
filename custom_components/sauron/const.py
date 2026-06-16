@@ -31,4 +31,3 @@ OPT_STALE_DATA_THRESHOLD_H_MAX: Final[int] = 96
 
 # ── Repair issue identifiers ─────────────────────────────────────────────────
 ISSUE_STALE_DATA: Final[str] = "stale_data"
-ISSUE_AUTH_FAILED: Final[str] = "auth_failed"
