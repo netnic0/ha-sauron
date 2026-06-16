@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING
 
 from homeassistant.components.sensor import (
@@ -112,11 +112,11 @@ class SauronSensor(SauronMeterEntity, SensorEntity):
             return data.yearly_m3
         if key == "data_freshness_hours":
             now = datetime.now(UTC)
-            delta = now - datetime.combine(
-                data.latest_reading.reading_date,
-                time.min,
-                tzinfo=UTC,
-            )
+            reading_date = data.latest_reading.reading_date
+            # Use fetched_at as the reference point for freshness — it's always
+            # accurate. reading_date from the API may be a billing date weeks old.
+            fetched_at = data.latest_reading.fetched_at
+            delta = now - fetched_at
             return round(delta.total_seconds() / 3600, 1)
         return None
 
