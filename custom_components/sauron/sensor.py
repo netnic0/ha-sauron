@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, time
+from datetime import UTC, date, datetime, time
 from typing import TYPE_CHECKING
 
 from homeassistant.components.sensor import (
@@ -94,14 +94,14 @@ class SauronSensor(SauronMeterEntity, SensorEntity):
         self.entity_description = description
 
     @property
-    def native_value(self) -> float | str | None:
+    def native_value(self) -> float | str | date | None:
         data = self.coordinator.data
         key = self.entity_description.key
 
         if key == "last_index":
             return data.latest_reading.value_m3
         if key == "last_index_date":
-            return data.latest_reading.reading_date.isoformat()
+            return data.latest_reading.reading_date
         if key == "daily_liters":
             return data.daily_liters
         if key == "weekly_m3":
