@@ -52,8 +52,8 @@
     "sensor": {
       "last_index": { "name": "Wasserstand" },
       "last_index_date": { "name": "Datum letzte Ablesung" },
-      "daily_liters": { "name": "Tagesverbrauch" },
-      "weekly_m3": { "name": "Wochenverbrauch" },
+      "daily_liters": { "name": "Gestern Verbrauch" },
+      "weekly_m3": { "name": "Aktuelle Woche" },
       "monthly_m3": { "name": "Monatsverbrauch" },
       "yearly_m3": { "name": "Jahresverbrauch" },
       "data_freshness_hours": { "name": "Datenalter" }
