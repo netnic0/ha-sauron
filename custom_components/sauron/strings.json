@@ -57,10 +57,10 @@
         "name": "Last reading date"
       },
       "daily_liters": {
-        "name": "Daily consumption"
+        "name": "Yesterday consumption"
       },
       "weekly_m3": {
-        "name": "Weekly consumption"
+        "name": "Current week consumption"
       },
       "monthly_m3": {
         "name": "Monthly consumption"
