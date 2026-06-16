@@ -1,57 +1,148 @@
 # SAURon — Home Assistant integration for SAUR water consumption
 
-[![HACS](https://img.shields.io/badge/HACS-Integration-blue.svg)](https://hacs.xyz)
+[![HACS](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://hacs.xyz)
 [![GitHub release](https://img.shields.io/github/v/release/netnic0/ha-sauron)](https://github.com/netnic0/ha-sauron/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A modern, typed, Silver-quality HACS integration for monitoring your [SAUR](https://www.saur.fr) water consumption directly in Home Assistant.
+Monitor your [SAUR](https://www.saur.fr) water consumption directly in Home Assistant — daily, weekly, monthly and yearly usage, with Energy Dashboard integration.
+
+> **Status**: Beta — works in production, field-tested with a single meter installation.
+> DE/ES translations were machine-authored and welcome native-speaker corrections.
+
+---
 
 ## Features
 
-- **7 sensor entities** per meter: absolute index, last reading date, daily/weekly/monthly/yearly consumption, data age
-- **Energy Dashboard** compatible: the `last_index` sensor feeds natively into HA's Water panel
-- **Multi-account** ready: add multiple config entries for multiple SAUR subscriptions
-- **Repair Issues**: HA alerts when data becomes stale (configurable threshold)
-- **Re-authentication flow**: seamless credential update without removing the integration
-- **Options flow**: configure polling interval and stale-data threshold at runtime
-- **i18n**: English and French (DE/ES planned)
-- **Silver quality tier**: typed, tested, no external library dependencies
-
-## Installation
-
-### HACS (recommended)
-
-1. In HACS, click **+ Explore & Download Repositories**
-2. Search for **SAURon**
-3. Download and restart Home Assistant
-
-### Manual
-
-Copy `custom_components/sauron/` to your `config/custom_components/` folder and restart.
-
-## Configuration
-
-1. Go to **Settings → Integrations → Add Integration**
-2. Search for **SAURon**
-3. Enter your SAUR customer portal credentials (same as [mon-espace.saurclient.fr](https://mon-espace.saurclient.fr))
-
-## Sensors
+- **7 sensor entities** per meter subscription:
 
 | Entity | Unit | Description |
 |---|---|---|
-| Water index | m³ | Absolute meter index (feeds Energy Dashboard Water) |
-| Last reading date | — | Date of the latest DTU-transmitted reading |
-| Daily consumption | L | Yesterday's consumption |
-| Weekly consumption | m³ | Current week |
-| Monthly consumption | m³ | Current month |
-| Yearly consumption | m³ | Current year |
-| Data age | h | Hours since the last reading (diagnostic) |
+| Water index | m³ | Absolute meter reading (feeds Energy Dashboard → Water) |
+| Last reading date | date | Date of the latest SAUR reading |
+| Daily consumption | L | Yesterday's usage |
+| Weekly consumption | m³ | Current week total |
+| Monthly consumption | m³ | Current month total |
+| Yearly consumption | m³ | Current year total |
+| Data age *(diagnostic)* | h | Hours since last API poll |
+
+- **Energy Dashboard** compatible — add `Water index` to **Settings → Energy → Water**
+- **Re-authentication flow** — seamless credential update without removing the integration
+- **Repair Issues** — HA alerts when data becomes stale (configurable threshold)
+- **Options flow** — configure polling interval and stale-data threshold at runtime
+- **Multi-account** — add multiple config entries for multiple subscriptions
+- **Localised** — English, French, German, Spanish
+
+---
+
+## Requirements
+
+- Home Assistant **2024.12.0** or later
+- A [SAUR customer portal](https://mon-espace.saurclient.fr) account (email + password)
+- Your meter must be enrolled in SAUR's remote-reading programme (most French meters since 2022)
+
+---
+
+## Installation
+
+### Via HACS (recommended)
+
+1. Open HACS in Home Assistant
+2. Click **⋮ → Custom repositories**
+3. Add `https://github.com/netnic0/ha-sauron` with category **Integration**
+4. Search for **SAURon** and click **Download**
+5. Restart Home Assistant
+
+### Manual
+
+1. Copy the `custom_components/sauron/` folder to your `config/custom_components/` directory
+2. Restart Home Assistant
+
+---
+
+## Configuration
+
+1. Go to **Settings → Integrations → + Add Integration**
+2. Search for **SAURon**
+3. Enter your SAUR portal credentials (same as [mon-espace.saurclient.fr](https://mon-espace.saurclient.fr))
+4. The integration auto-discovers your subscription ID — no manual entry needed
+
+### Options
+
+After setup, click **Configure** on the integration card to adjust:
+
+| Option | Default | Description |
+|---|---|---|
+| Polling interval | 4 h | How often to query the SAUR API |
+| Stale data threshold | 36 h | Hours before a Repair Issue is raised |
+
+> SAUR updates meter data once per day (J−1). Polling more often than every 4 hours is not useful.
+
+---
 
 ## Energy Dashboard
 
-Add `sensor.sauron_*_last_index` to **Settings → Energy → Water** for historical water tracking.
+Add the **Water index** sensor to the HA Energy Dashboard:
 
-## Notes
+1. Go to **Settings → Energy**
+2. Under **Water**, click **Add water source**
+3. Select `sensor.saur_water_meter_water_index`
+4. Save
 
-- SAUR data is typically delayed by 1 day (J-1)
-- The integration polls every 4 hours by default (configurable)
-- reCAPTCHA: the SAUR mobile API accepts a literal `"true"` token — no browser automation needed
+HA will automatically track cumulative water consumption over time.
+
+### utility_meter (optional)
+
+For daily/weekly/monthly resets independent of the SAUR API:
+
+```yaml
+# configuration.yaml
+utility_meter:
+  water_daily:
+    source: sensor.saur_water_meter_water_index
+    cycle: daily
+  water_monthly:
+    source: sensor.saur_water_meter_water_index
+    cycle: monthly
+```
+
+---
+
+## Data freshness
+
+SAUR transmits meter readings once per day, typically between midnight and 6 AM.
+The `Daily consumption` sensor will show **Unknown** until the reading for J−1 arrives.
+This is expected behaviour — not a bug.
+
+---
+
+## Troubleshooting
+
+**"Invalid credentials" during setup**
+- Double-check your email and password on [mon-espace.saurclient.fr](https://mon-espace.saurclient.fr)
+- SAUR accounts with two-factor authentication are not yet supported
+
+**"Cannot connect"**
+- The SAUR API (`apib2c.azure.saurclient.fr`) may be temporarily unavailable
+- Check your internet connection and retry
+
+**Sensors show "Unknown" after install**
+- SAUR data updates once per day — wait up to 24 hours for the first readings
+- Check the HA logs for debug output: enable `custom_components.sauron: debug` in your `logger:` config
+
+**Stale data alert in Repairs**
+- Your meter may not be transmitting (check the SAUR portal)
+- The threshold is configurable via **Configure** on the integration card
+
+---
+
+## Technical notes
+
+- The SAUR mobile API accepts `captchaToken: "true"` as a literal string — no browser automation or real reCAPTCHA solving is required
+- No external Python library dependency — uses HA's bundled `aiohttp`
+- All credentials are stored in HA's config entry and never sent to third parties
+
+---
+
+## License
+
+[MIT](LICENSE) — © 2026 Nicolas Diguet
