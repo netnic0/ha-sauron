@@ -52,8 +52,8 @@
     "sensor": {
       "last_index": { "name": "Index eau" },
       "last_index_date": { "name": "Date dernier relevé" },
-      "daily_liters": { "name": "Consommation journalière" },
-      "weekly_m3": { "name": "Consommation hebdomadaire" },
+      "daily_liters": { "name": "Consommation J-1" },
+      "weekly_m3": { "name": "Consommation semaine (J-1)" },
       "monthly_m3": { "name": "Consommation mensuelle" },
       "yearly_m3": { "name": "Consommation annuelle" },
       "data_freshness_hours": { "name": "Âge des données" }

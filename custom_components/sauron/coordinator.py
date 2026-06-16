@@ -57,6 +57,8 @@ class SauronCoordinator(DataUpdateCoordinator[SauronData]):
         """Fetch latest data from the SAUR API."""
         subscription_id: str = self.config_entry.data[CONF_SUBSCRIPTION_ID]
         now = datetime.now(UTC)
+        # SAUR data is always J-1: query yesterday to get certified available data
+        yesterday = (now.date() - timedelta(days=1))
 
         # Primary: latest meter index
         try:
@@ -71,12 +73,11 @@ class SauronCoordinator(DataUpdateCoordinator[SauronData]):
 
         data = _parse_last_index(subscription_id, raw_index, now)
 
-        # Enrich: daily consumption from weekly endpoint
+        # Enrich: daily consumption — query the week containing yesterday
         daily_liters: float | None = None
         try:
-            today = now.date()
             raw_weekly = await self._client.async_get_weekly(
-                subscription_id, today.year, today.month, today.day
+                subscription_id, yesterday.year, yesterday.month, yesterday.day
             )
             daily_liters = _extract_daily_liters(raw_weekly)
         except SauronAuthError:
@@ -106,18 +107,15 @@ class SauronCoordinator(DataUpdateCoordinator[SauronData]):
         except Exception as err:
             _LOGGER.debug("Could not fetch yearly data for %s: %s", subscription_id, err)
 
-        # Enrich: weekly from monthly sub-periods (sum of Day entries in current week)
+        # Enrich: weekly total — sum all Day entries from the week containing yesterday
         weekly_m3: float | None = None
-        if daily_liters is not None:
-            # Rough: sum Day entries from the weekly endpoint we already fetched
-            try:
-                today = now.date()
-                raw_weekly2 = await self._client.async_get_weekly(
-                    subscription_id, today.year, today.month, today.day
-                )
-                weekly_m3 = _extract_week_total_m3(raw_weekly2)
-            except Exception as err:
-                _LOGGER.debug("Could not compute weekly total for %s: %s", subscription_id, err)
+        try:
+            raw_weekly2 = await self._client.async_get_weekly(
+                subscription_id, yesterday.year, yesterday.month, yesterday.day
+            )
+            weekly_m3 = _extract_week_total_m3(raw_weekly2)
+        except Exception as err:
+            _LOGGER.debug("Could not compute weekly total for %s: %s", subscription_id, err)
 
         enriched = SauronData(
             meter_info=data.meter_info,
