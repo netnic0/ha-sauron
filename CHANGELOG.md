@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3](https://github.com/netnic0/ha-sauron/compare/ha-sauron-v0.2.2...ha-sauron-v0.2.3) (2026-06-16)
+
+
+### Bug Fixes
+
+* **brand:** generate proper PNG assets from SAUR SVG + add icon.svg with water drop ([a6e7e19](https://github.com/netnic0/ha-sauron/commit/a6e7e198d9832b92e326336315311a679484d074))
+* **coordinator:** query J-1 for daily/weekly data (SAUR always lags by 1 day) ([969d501](https://github.com/netnic0/ha-sauron/commit/969d501203d6f5efc8cd25105645e04eba72592d))
+* **i18n+coordinator:** J-1 query, rename weekly/daily sensors, correct sensor date types ([1c989ce](https://github.com/netnic0/ha-sauron/commit/1c989ce67a2651d8884a76c5c999d753c91f80d8))
+
 ## [0.2.2](https://github.com/netnic0/ha-sauron/compare/ha-sauron-v0.2.1...ha-sauron-v0.2.2) (2026-06-16)
 
 
