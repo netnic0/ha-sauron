@@ -12,7 +12,7 @@ from homeassistant.helpers.issue_registry import IssueSeverity, async_create_iss
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import SauronApiClient, SauronAuthError, SauronData
-from .api.models import MeterInfo, MeterReading, SauronData
+from .api.models import MeterInfo, MeterReading
 from .const import (
     CONF_SUBSCRIPTION_ID,
     DEFAULT_SCAN_INTERVAL_H,
@@ -96,20 +96,43 @@ def _parse_consumption(
     """Parse the SAUR /consumptions API response into a SauronData snapshot.
 
     The SAUR API can return either a dict or a list depending on the endpoint.
-    This function normalises the response into our frozen dataclasses.
+    When a list is returned (multiple readings), daily consumption is computed
+    as the difference between the two most recent index values.
     """
     from datetime import date
+
+    daily_liters: float | None = None
 
     # Normalise: the endpoint may return a list of readings or a single dict
     if isinstance(raw, list) and raw:
         latest = raw[-1]
+        # Compute daily consumption from consecutive index values when available
+        if len(raw) >= 2:
+            prev = raw[-2]
+            prev_val = float(
+                prev.get("index") or prev.get("value") or prev.get("volume") or 0.0
+            )
+            curr_val = float(
+                latest.get("index") or latest.get("value") or latest.get("volume") or 0.0
+            )
+            delta_m3 = curr_val - prev_val
+            if delta_m3 >= 0:
+                daily_liters = round(delta_m3 * 1000, 1)
     elif isinstance(raw, dict):
         latest = raw
+        # Single dict may contain a pre-computed daily volume field
+        daily_raw = (
+            latest.get("dailyConsumption")
+            or latest.get("daily_volume")
+            or latest.get("volumeJour")
+        )
+        if daily_raw is not None:
+            daily_liters = round(float(daily_raw) * 1000, 1)
     else:
         from .api.exceptions import SauronNoDataError
         raise SauronNoDataError("Empty consumption payload")
 
-    # Extract index value and date — field names vary by firmware/API version
+    # Extract index value and date — field names vary by API version
     value_m3 = float(
         latest.get("index")
         or latest.get("value")
@@ -134,4 +157,8 @@ def _parse_consumption(
         fetched_at=fetched_at,
     )
 
-    return SauronData(meter_info=meter_info, latest_reading=reading)
+    return SauronData(
+        meter_info=meter_info,
+        latest_reading=reading,
+        daily_liters=daily_liters,
+    )
