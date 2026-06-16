@@ -11,7 +11,7 @@ from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResu
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import SauronApiClient, SauronAuthError, SauronApiError
+from .api import SauronApiClient, SauronApiError, SauronAuthError, SauronNoDataError
 from .const import (
     CONF_CLIENT_ID,
     CONF_LOGIN,
@@ -41,32 +41,49 @@ _STEP_USER_SCHEMA = vol.Schema(
 async def _probe_saur(
     session: aiohttp.ClientSession, login: str, password: str
 ) -> tuple[str, str]:
-    """Authenticate and discover (client_id, subscription_id).
+    """Authenticate and discover (client_id, section_subscription_id).
+
+    Authentication response provides:
+      { "token": { "access_token": "..." }, "clientId": "...", "defaultSectionId": "..." }
+
+    We use defaultSectionId directly as the subscription_id to avoid an extra
+    API call during setup. If not present, we fall back to fetching
+    /admin/users/v2/website_areas/{client_id} and picking the first
+    sectionSubscriptionId found.
 
     Returns (client_id, subscription_id) on success.
     Raises SauronAuthError or SauronApiError on failure.
     """
     client = SauronApiClient(session, login, password)
     await client.async_authenticate()
-    # Retrieve the first delivery point to get client_id + subscription_id
-    # The brand endpoint returns client information including client_id
-    # We try subscriptions with a placeholder and parse the actual IDs from the response
-    # NOTE: exact endpoint discovery may need adjustment based on live API response shape
-    data = await client._get("/admin/v2/brandparameter")
-    client_id: str = str(data.get("clientId") or data.get("client_id", ""))
+
+    client_id = client.client_id or ""
     if not client_id:
-        raise SauronApiError(0, "client_id not found in brandparameter response")
-    subscriptions = await client.async_get_subscriptions(client_id)
-    if not subscriptions:
-        raise SauronApiError(0, "No subscriptions found for this account")
-    subscription_id: str = str(
-        subscriptions[0].get("sectionSubscriptionId")
-        or subscriptions[0].get("subscriptionId")
-        or subscriptions[0].get("id", "")
-    )
-    if not subscription_id:
-        raise SauronApiError(0, "subscription_id not found in delivery points response")
-    return client_id, subscription_id
+        raise SauronApiError(0, "clientId missing from auth response")
+
+    # Fast path: defaultSectionId is available directly from the auth response
+    subscription_id = client.default_section_id or ""
+    if subscription_id:
+        _LOGGER.debug("SAURon: using defaultSectionId=%s from auth", subscription_id)
+        return client_id, subscription_id
+
+    # Slow path: fetch website_areas to find the first subscription
+    _LOGGER.debug("SAURon: defaultSectionId absent, fetching website_areas")
+    try:
+        areas = await client.async_get_website_areas(client_id)
+    except (SauronApiError, SauronNoDataError) as err:
+        raise SauronApiError(0, f"Could not discover subscriptions: {err}") from err
+
+    # Response: {"clients": [{"customerAccounts": [{"sectionSubscriptions": [{"sectionSubscriptionId": "..."}]}]}]}
+    for cli in areas.get("clients", []):
+        for account in cli.get("customerAccounts", []):
+            for sub in account.get("sectionSubscriptions", []):
+                sid = str(sub.get("sectionSubscriptionId", ""))
+                if sid:
+                    _LOGGER.debug("SAURon: found sectionSubscriptionId=%s", sid)
+                    return client_id, sid
+
+    raise SauronApiError(0, "No sectionSubscriptionId found in website_areas response")
 
 
 class SauronConfigFlow(ConfigFlow, domain=DOMAIN):

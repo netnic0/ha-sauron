@@ -1,7 +1,7 @@
 """Async HTTP client for the SAUR API (apib2c.azure.saurclient.fr).
 
 Authentication flow:
-  POST /admin/v2/auth  →  access_token (Bearer)
+  POST /admin/v2/auth  →  { token: { access_token }, clientId, defaultSectionId }
 
 The reCAPTCHA v3 field accepted by the API is a literal string "true",
 not a real token — the server-side check is not enforced for non-browser
@@ -12,12 +12,14 @@ Token lifecycle:
   - Re-authenticated on 401/403 (one retry then raises SauronAuthError)
   - On SauronAuthError, the coordinator raises ConfigEntryAuthFailed
     which triggers HA's native re-authentication flow
+
+Field names are sourced from reverse-engineering the eyeonsaur-ha integration
+and the Saur_fr_client library (https://github.com/cekage/Saur_fr_client).
 """
 
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import aiohttp
@@ -28,16 +30,13 @@ _LOGGER = logging.getLogger(__name__)
 
 _BASE_URL = "https://apib2c.azure.saurclient.fr"
 _AUTH_ENDPOINT = "/admin/v2/auth"
-_BRAND_ENDPOINT = "/admin/v2/brandparameter"
-_SUBSCRIPTIONS_ENDPOINT = "/deli/section_subscriptions/{id}/supply_areas/delivery_points"
-_CONSUMPTIONS_ENDPOINT = "/deli/section_subscription/{id}/consumptions"
-_CONSUMPTIONS_DAILY_ENDPOINT = "/deli/section_subscription/{id}/consumptions/daily"
-_CONSUMPTIONS_WEEKLY_ENDPOINT = "/deli/section_subscription/{id}/consumptions/weekly"
-_CONSUMPTIONS_MONTHLY_ENDPOINT = "/deli/section_subscription/{id}/consumptions/monthly"
-_CONSUMPTIONS_YEARLY_ENDPOINT = "/deli/section_subscription/{id}/consumptions/yearly"
-
-_TOKEN_MARGIN = timedelta(minutes=5)
-"""Refresh token this many minutes before it expires."""
+_WEBSITE_AREAS_ENDPOINT = "/admin/users/v2/website_areas/{client_id}"
+_DELIVERY_POINTS_ENDPOINT = "/deli/section_subscriptions/{section_id}/supply_areas/delivery_points"
+_METER_INDEXES_ENDPOINT = "/deli/section_subscriptions/{section_id}/meter_indexes/last"
+_CONSUMPTIONS_ENDPOINT = "/deli/section_subscription/{section_id}/consumptions"
+_CONSUMPTIONS_WEEKLY_ENDPOINT = "/deli/section_subscription/{section_id}/consumptions/weekly"
+_CONSUMPTIONS_MONTHLY_ENDPOINT = "/deli/section_subscription/{section_id}/consumptions/monthly"
+_CONSUMPTIONS_YEARLY_ENDPOINT = "/deli/section_subscription/{section_id}/consumptions/yearly"
 
 
 class SauronApiClient:
@@ -53,41 +52,63 @@ class SauronApiClient:
         self._login = login
         self._password = password
         self._token: str | None = None
-        self._token_expires_at: datetime | None = None
+        self._client_id: str | None = None
+        self._default_section_id: str | None = None
 
     # ── Authentication ────────────────────────────────────────────────────────
 
     async def async_authenticate(self) -> None:
-        """Obtain a fresh Bearer token. Raises SauronAuthError on failure."""
+        """Obtain a fresh Bearer token and discover client_id.
+
+        Raises SauronAuthError on invalid credentials.
+        Raises SauronApiError on unexpected HTTP errors.
+
+        Response structure:
+          { "token": { "access_token": "..." }, "clientId": "...", "defaultSectionId": "..." }
+        """
         payload = {
-            "login": self._login,
+            "username": self._login,
             "password": self._password,
+            "client_id": "frontjs-client",
+            "grant_type": "password",
+            "scope": "api-scope",
             "isRecaptchaV3": True,
             "captchaToken": "true",
         }
         async with self._session.post(
             f"{_BASE_URL}{_AUTH_ENDPOINT}", json=payload
         ) as resp:
-            if resp.status == 401 or resp.status == 403:
+            if resp.status in (401, 403):
                 raise SauronAuthError("Invalid SAUR credentials")
             if resp.status != 200:
                 raise SauronApiError(resp.status, await resp.text())
             data: dict[str, Any] = await resp.json()
 
-        token = data.get("access_token") or data.get("accessToken")
+        # Extract token from nested {"token": {"access_token": "..."}}
+        token_obj = data.get("token") or {}
+        token = token_obj.get("access_token") if isinstance(token_obj, dict) else None
         if not token:
             raise SauronAuthError("No access_token in auth response")
 
         self._token = token
-        # SAUR tokens typically expire in 3600s; fall back to 50 minutes if absent
-        expires_in = int(data.get("expires_in", 3000))
-        self._token_expires_at = datetime.now(UTC) + timedelta(seconds=expires_in)
-        _LOGGER.debug("SAUR token refreshed, expires in %ds", expires_in)
+        self._client_id = str(data.get("clientId", ""))
+        self._default_section_id = str(data.get("defaultSectionId", ""))
+        _LOGGER.debug(
+            "SAUR authenticated: client_id=%s, default_section_id=%s",
+            self._client_id,
+            self._default_section_id,
+        )
+
+    @property
+    def client_id(self) -> str | None:
+        return self._client_id
+
+    @property
+    def default_section_id(self) -> str | None:
+        return self._default_section_id
 
     def _is_token_valid(self) -> bool:
-        if not self._token or not self._token_expires_at:
-            return False
-        return datetime.now(UTC) < (self._token_expires_at - _TOKEN_MARGIN)
+        return bool(self._token)
 
     async def _ensure_token(self) -> str:
         if not self._is_token_valid():
@@ -101,60 +122,76 @@ class SauronApiClient:
         """GET with automatic token refresh on 401."""
         token = await self._ensure_token()
         headers = {"Authorization": f"Bearer {token}"}
+
         async with self._session.get(
             f"{_BASE_URL}{path}", headers=headers, params=params
         ) as resp:
-            if resp.status in (401, 403):
-                # Token may have been revoked server-side — retry once
-                _LOGGER.debug("Token rejected (%d), re-authenticating", resp.status)
-                await self.async_authenticate()
-                token = self._token
-                headers = {"Authorization": f"Bearer {token}"}
-            else:
+            if resp.status not in (401, 403):
                 if resp.status != 200:
                     raise SauronApiError(resp.status, await resp.text())
                 return await resp.json()
 
-        # Second attempt after re-auth
+        # Token rejected — retry once after re-auth
+        _LOGGER.debug("Token rejected (%d), re-authenticating", resp.status)
+        self._token = None
+        await self.async_authenticate()
+        headers = {"Authorization": f"Bearer {self._token}"}
+
         async with self._session.get(
             f"{_BASE_URL}{path}", headers=headers, params=params
-        ) as resp:
-            if resp.status in (401, 403):
+        ) as resp2:
+            if resp2.status in (401, 403):
                 raise SauronAuthError("Re-authentication failed")
-            if resp.status != 200:
-                raise SauronApiError(resp.status, await resp.text())
-            return await resp.json()
+            if resp2.status != 200:
+                raise SauronApiError(resp2.status, await resp2.text())
+            return await resp2.json()
 
-    # ── Business endpoints ────────────────────────────────────────────────────
+    # ── Discovery ─────────────────────────────────────────────────────────────
 
-    async def async_get_subscriptions(self, client_id: str) -> list[dict[str, Any]]:
-        """Return the list of delivery points / meters for a client account."""
-        path = _SUBSCRIPTIONS_ENDPOINT.format(id=client_id)
+    async def async_get_website_areas(self, client_id: str) -> dict[str, Any]:
+        """GET /admin/users/v2/website_areas/{client_id} — account contracts."""
+        path = _WEBSITE_AREAS_ENDPOINT.format(client_id=client_id)
+        return await self._get(path)
+
+    async def async_get_delivery_points(self, section_id: str) -> list[dict[str, Any]]:
+        """GET delivery points for a section subscription.
+
+        Response: list of dicts with keys:
+          sectionSubscriptionId, meter.installationDate, meter.trueRegistrationNumber, ...
+        """
+        path = _DELIVERY_POINTS_ENDPOINT.format(section_id=section_id)
         data = await self._get(path)
         if not isinstance(data, list):
-            raise SauronNoDataError(f"Unexpected subscriptions payload: {type(data)}")
+            raise SauronNoDataError(f"Expected list from delivery_points, got {type(data)}")
         return data
 
-    async def async_get_latest_consumption(self, subscription_id: str) -> dict[str, Any]:
-        """Return the latest consumption record for a subscription."""
-        path = _CONSUMPTIONS_ENDPOINT.format(id=subscription_id)
-        data = await self._get(path)
-        if not isinstance(data, (dict, list)):
-            raise SauronNoDataError("Empty consumption payload")
-        return data  # type: ignore[return-value]
+    async def async_get_meter_last_index(self, section_id: str) -> dict[str, Any]:
+        """GET the latest meter index reading.
+
+        Response: { "readingDate": "ISO datetime", "indexValue": float }
+        """
+        path = _METER_INDEXES_ENDPOINT.format(section_id=section_id)
+        return await self._get(path)
+
+    # ── Consumption endpoints ─────────────────────────────────────────────────
+
+    async def async_get_consumptions(self, section_id: str) -> dict[str, Any]:
+        """GET the latest consumption snapshot."""
+        path = _CONSUMPTIONS_ENDPOINT.format(section_id=section_id)
+        return await self._get(path)
 
     async def async_get_weekly(
-        self, subscription_id: str, year: int, month: int, day: int
+        self, section_id: str, year: int, month: int, day: int
     ) -> dict[str, Any]:
-        path = _CONSUMPTIONS_WEEKLY_ENDPOINT.format(id=subscription_id)
+        path = _CONSUMPTIONS_WEEKLY_ENDPOINT.format(section_id=section_id)
         return await self._get(path, params={"year": year, "month": month, "day": day})
 
     async def async_get_monthly(
-        self, subscription_id: str, year: int, month: int
+        self, section_id: str, year: int, month: int
     ) -> dict[str, Any]:
-        path = _CONSUMPTIONS_MONTHLY_ENDPOINT.format(id=subscription_id)
+        path = _CONSUMPTIONS_MONTHLY_ENDPOINT.format(section_id=section_id)
         return await self._get(path, params={"year": year, "month": month})
 
-    async def async_get_yearly(self, subscription_id: str, year: int) -> dict[str, Any]:
-        path = _CONSUMPTIONS_YEARLY_ENDPOINT.format(id=subscription_id)
+    async def async_get_yearly(self, section_id: str, year: int) -> dict[str, Any]:
+        path = _CONSUMPTIONS_YEARLY_ENDPOINT.format(section_id=section_id)
         return await self._get(path, params={"year": year})
