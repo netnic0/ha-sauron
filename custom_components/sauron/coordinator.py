@@ -79,6 +79,7 @@ class SauronCoordinator(DataUpdateCoordinator[SauronData]):
             raw_weekly = await self._client.async_get_weekly(
                 subscription_id, yesterday.year, yesterday.month, yesterday.day
             )
+            _LOGGER.debug("SAURon weekly raw response for %s: %s", subscription_id, raw_weekly)
             daily_liters = _extract_daily_liters(raw_weekly)
         except SauronAuthError:
             raise  # re-raise auth errors (will be caught by HA)
