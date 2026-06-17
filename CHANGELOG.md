@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0](https://github.com/netnic0/ha-sauron/compare/ha-sauron-v0.3.0...ha-sauron-v0.4.0) (2026-06-17)
+
+
+### Features
+
+* **device:** enrich device info + water dashboard improvements ([2462bbd](https://github.com/netnic0/ha-sauron/commit/2462bbde21232394ed0cd2393d10e26930fe3183))
+* **device:** enrich DeviceInfo with meter hardware metadata from delivery_points ([502c5d9](https://github.com/netnic0/ha-sauron/commit/502c5d94c6ac1002a16295bf9d6296ab48e0145a))
+* **lovelace:** add meter hardware info section to water dashboard ([46aac6a](https://github.com/netnic0/ha-sauron/commit/46aac6a35d5eba5ee2e8bd87d6bf3d6e69fe7fd6))
+
 ## [0.3.0](https://github.com/netnic0/ha-sauron/compare/ha-sauron-v0.2.7...ha-sauron-v0.3.0) (2026-06-17)
 
 
