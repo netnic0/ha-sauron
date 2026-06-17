@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.7](https://github.com/netnic0/ha-sauron/compare/ha-sauron-v0.2.6...ha-sauron-v0.2.7) (2026-06-17)
+
+
+### Bug Fixes
+
+* **integration:** address P0/P1 code review findings ([3b8b42c](https://github.com/netnic0/ha-sauron/commit/3b8b42cdda6765e7098f7d114d25776e5565c5ec))
+* **integration:** address P0/P1 code review findings ([88470d6](https://github.com/netnic0/ha-sauron/commit/88470d677d981a5d4686966b5d98e2b56565edcd))
+
 ## [0.2.6](https://github.com/netnic0/ha-sauron/compare/ha-sauron-v0.2.5...ha-sauron-v0.2.6) (2026-06-17)
 
 
