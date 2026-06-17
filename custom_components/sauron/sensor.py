@@ -11,7 +11,7 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import EntityCategory, UnitOfVolume
+from homeassistant.const import EntityCategory, UnitOfTime, UnitOfVolume
 
 from .const import DOMAIN
 from .entity import SauronMeterEntity
@@ -75,7 +75,7 @@ METER_SENSORS: tuple[SensorEntityDescription, ...] = (
         key="data_freshness_hours",
         translation_key="data_freshness_hours",
         state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement="h",
+        native_unit_of_measurement=UnitOfTime.HOURS,
         entity_category=EntityCategory.DIAGNOSTIC,
         suggested_display_precision=1,
     ),
