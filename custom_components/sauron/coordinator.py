@@ -79,7 +79,16 @@ class SauronCoordinator(DataUpdateCoordinator[SauronData]):
             raw_weekly = await self._client.async_get_weekly(
                 subscription_id, yesterday.year, yesterday.month, yesterday.day
             )
-            _LOGGER.error("SAURon weekly raw response for %s: %s", subscription_id, raw_weekly)
+            _LOGGER.error(
+                "SAURon weekly keys=%s type=%s len=%s",
+                list(raw_weekly.keys()) if isinstance(raw_weekly, dict) else "NOT_DICT",
+                type(raw_weekly).__name__,
+                len(raw_weekly.get("consumptions", [])) if isinstance(raw_weekly, dict) else "N/A",
+            )
+            if isinstance(raw_weekly, dict) and raw_weekly.get("consumptions"):
+                first = raw_weekly["consumptions"][0]
+                _LOGGER.error("SAURon weekly first entry: %s", first)
+            _LOGGER.error("SAURon weekly full: %s", str(raw_weekly)[:500])
             daily_liters = _extract_daily_liters(raw_weekly)
         except SauronAuthError:
             raise  # re-raise auth errors (will be caught by HA)
