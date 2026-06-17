@@ -59,6 +59,8 @@ class SauronCoordinator(DataUpdateCoordinator[SauronData]):
         now = datetime.now(UTC)
         # SAUR data is always J-1: query yesterday to get certified available data
         yesterday = (now.date() - timedelta(days=1))
+        # Weekly endpoint may lag — also try previous week as fallback
+        last_week = (now.date() - timedelta(days=7))
 
         # Primary: latest meter index
         try:
@@ -73,22 +75,19 @@ class SauronCoordinator(DataUpdateCoordinator[SauronData]):
 
         data = _parse_last_index(subscription_id, raw_index, now)
 
-        # Enrich: daily consumption — query the week containing yesterday
+        # Enrich: daily consumption — query the week containing yesterday, fallback to previous week
         daily_liters: float | None = None
         try:
             raw_weekly = await self._client.async_get_weekly(
                 subscription_id, yesterday.year, yesterday.month, yesterday.day
             )
-            _LOGGER.error(
-                "SAURon weekly keys=%s type=%s len=%s",
-                list(raw_weekly.keys()) if isinstance(raw_weekly, dict) else "NOT_DICT",
-                type(raw_weekly).__name__,
-                len(raw_weekly.get("consumptions", [])) if isinstance(raw_weekly, dict) else "N/A",
-            )
-            if isinstance(raw_weekly, dict) and raw_weekly.get("consumptions"):
-                first = raw_weekly["consumptions"][0]
-                _LOGGER.error("SAURon weekly first entry: %s", first)
-            _LOGGER.error("SAURon weekly full: %s", str(raw_weekly)[:500])
+            _LOGGER.error("SAURon weekly(yesterday) len=%s", len(raw_weekly.get("consumptions", [])) if isinstance(raw_weekly, dict) else "N/A")
+            if isinstance(raw_weekly, dict) and not raw_weekly.get("consumptions"):
+                # Current week has no data yet — try previous week
+                raw_weekly = await self._client.async_get_weekly(
+                    subscription_id, last_week.year, last_week.month, last_week.day
+                )
+                _LOGGER.error("SAURon weekly(last_week) len=%s full=%s", len(raw_weekly.get("consumptions", [])) if isinstance(raw_weekly, dict) else "N/A", str(raw_weekly)[:300])
             daily_liters = _extract_daily_liters(raw_weekly)
         except SauronAuthError:
             raise  # re-raise auth errors (will be caught by HA)
