@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.6](https://github.com/netnic0/ha-sauron/compare/ha-sauron-v0.2.5...ha-sauron-v0.2.6) (2026-06-17)
+
+
+### Bug Fixes
+
+* **coordinator:** query J-2 for weekly data; take last non-zero day entry ([5debbe1](https://github.com/netnic0/ha-sauron/commit/5debbe1633c61c0306f56b7d60704bb774f20e34))
+* **coordinator:** query J-2 for weekly data; take last non-zero day entry ([ce6a5dd](https://github.com/netnic0/ha-sauron/commit/ce6a5dd3219a3402a0aa9ef1c1306e02fa880c45))
+
 ## [0.2.5](https://github.com/netnic0/ha-sauron/compare/ha-sauron-v0.2.4...ha-sauron-v0.2.5) (2026-06-17)
 
 
