@@ -153,16 +153,16 @@ class SauronApiClient:
         path = _WEBSITE_AREAS_ENDPOINT.format(client_id=client_id)
         return await self._get(path)
 
-    async def async_get_delivery_points(self, section_id: str) -> list[dict[str, Any]]:
+    async def async_get_delivery_points(self, section_id: str) -> dict[str, Any]:
         """GET delivery points for a section subscription.
 
-        Response: list of dicts with keys:
-          sectionSubscriptionId, meter.installationDate, meter.trueRegistrationNumber, ...
+        Response: dict with keys:
+          meter, geographicAddress, sectionSubscriptionId, ...
         """
         path = _DELIVERY_POINTS_ENDPOINT.format(section_id=section_id)
         data = await self._get(path)
-        if not isinstance(data, list):
-            raise SauronNoDataError(f"Expected list from delivery_points, got {type(data)}")
+        if not isinstance(data, dict):
+            raise SauronNoDataError(f"Expected dict from delivery_points, got {type(data)}")
         return data
 
     async def async_get_meter_last_index(self, section_id: str) -> dict[str, Any]:

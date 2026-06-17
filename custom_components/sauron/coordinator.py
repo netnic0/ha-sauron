@@ -52,6 +52,22 @@ class SauronCoordinator(DataUpdateCoordinator[SauronData]):
         self._stale_threshold_h = entry.options.get(
             OPT_STALE_DATA_THRESHOLD_H, DEFAULT_STALE_DATA_THRESHOLD_H
         )
+        subscription_id: str = entry.data[CONF_SUBSCRIPTION_ID]
+        self._meter_info = MeterInfo(
+            subscription_id=subscription_id,
+            address="",
+            meter_serial="",
+            installation_date=None,
+        )
+
+    async def async_setup(self) -> None:
+        """Fetch static meter metadata once at integration setup."""
+        subscription_id: str = self.config_entry.data[CONF_SUBSCRIPTION_ID]
+        try:
+            raw_points = await self._client.async_get_delivery_points(subscription_id)
+            self._meter_info = _parse_delivery_points(subscription_id, raw_points)
+        except Exception as err:
+            _LOGGER.warning("Could not fetch delivery points for %s: %s", subscription_id, err)
 
     async def _async_update_data(self) -> SauronData:
         """Fetch latest data from the SAUR API."""
@@ -70,7 +86,7 @@ class SauronCoordinator(DataUpdateCoordinator[SauronData]):
         except Exception as err:
             raise UpdateFailed(f"SAUR API error: {err}") from err
 
-        data = _parse_last_index(subscription_id, raw_index, now)
+        data = _parse_last_index(subscription_id, raw_index, now, self._meter_info)
 
         # Enrich: monthly response — single call covers daily, weekly, and monthly sensors.
         # SAUR /consumptions/monthly returns every day of the month as a Day entry,
@@ -146,7 +162,8 @@ class SauronCoordinator(DataUpdateCoordinator[SauronData]):
 
 
 def _parse_last_index(
-    subscription_id: str, raw: dict[str, Any], fetched_at: datetime
+    subscription_id: str, raw: dict[str, Any], fetched_at: datetime,
+    meter_info: MeterInfo | None = None,
 ) -> SauronData:
     """Parse GET /meter_indexes/last response.
 
@@ -166,12 +183,13 @@ def _parse_last_index(
     except (ValueError, TypeError):
         reading_date = fetched_at.date()
 
-    meter_info = MeterInfo(
-        subscription_id=subscription_id,
-        address="",
-        meter_serial="",
-        installation_date=None,
-    )
+    if meter_info is None:
+        meter_info = MeterInfo(
+            subscription_id=subscription_id,
+            address="",
+            meter_serial="",
+            installation_date=None,
+        )
     reading = MeterReading(
         subscription_id=subscription_id,
         value_m3=float(index_value),
@@ -179,6 +197,43 @@ def _parse_last_index(
         fetched_at=fetched_at,
     )
     return SauronData(meter_info=meter_info, latest_reading=reading)
+
+
+def _parse_delivery_points(subscription_id: str, raw: dict[str, Any]) -> MeterInfo:
+    """Parse GET /deli/section_subscriptions/{id}/supply_areas/delivery_points.
+
+    Real API response shape (single dict, not a list):
+      { "meter": { "serialNumber": "...", "meterBrandCode": "...", ... },
+        "geographicAddress": { "city": "...", "streetAddress": "...", ... } }
+    """
+    meter = raw.get("meter") or {}
+    addr = raw.get("geographicAddress") or {}
+
+    raw_install = meter.get("installationDate", "")
+    try:
+        installation_date = date.fromisoformat(str(raw_install)[:10])
+    except (ValueError, TypeError):
+        installation_date = None
+
+    raw_brand = str(meter.get("meterBrandCode") or "")
+    manufacturer = raw_brand.split("(")[0].strip() if raw_brand else ""
+
+    raw_model = str(meter.get("meterModelCode") or "")
+    model = raw_model.lstrip("t").strip() if raw_model else ""
+
+    city = str(addr.get("city") or "")
+    address = city
+
+    return MeterInfo(
+        subscription_id=subscription_id,
+        address=address,
+        meter_serial=str(meter.get("serialNumber") or ""),
+        installation_date=installation_date,
+        meter_brand=manufacturer,
+        meter_model=model,
+        meter_diameter=str(meter.get("meterDiameterCode") or ""),
+        telereleve_tech=str(meter.get("pairingTechnologyCode") or ""),
+    )
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
