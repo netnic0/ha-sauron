@@ -57,10 +57,7 @@ class SauronCoordinator(DataUpdateCoordinator[SauronData]):
         """Fetch latest data from the SAUR API."""
         subscription_id: str = self.config_entry.data[CONF_SUBSCRIPTION_ID]
         now = datetime.now(UTC)
-        # SAUR data is always J-1: query J-2 to match the portal's own behaviour
-        # (the portal uses day-before-yesterday to avoid missing data for yesterday)
-        yesterday = (now.date() - timedelta(days=1))
-        query_date = (now.date() - timedelta(days=2))
+        yesterday = now.date() - timedelta(days=1)
 
         # Primary: latest meter index
         try:
@@ -75,31 +72,33 @@ class SauronCoordinator(DataUpdateCoordinator[SauronData]):
 
         data = _parse_last_index(subscription_id, raw_index, now)
 
-        # Enrich: daily + weekly — query week containing J-2 (portal behaviour)
-        daily_liters: float | None = None
-        weekly_raw_for_weekly: dict | None = None
-        try:
-            raw_weekly = await self._client.async_get_weekly(
-                subscription_id, query_date.year, query_date.month, query_date.day
-            )
-            daily_liters = _extract_daily_liters(raw_weekly)
-            weekly_raw_for_weekly = raw_weekly
-        except SauronAuthError as err:
-            raise ConfigEntryAuthFailed from err
-        except Exception as err:
-            _LOGGER.warning("Could not fetch weekly data for %s: %s", subscription_id, err)
-
-        # Enrich: monthly consumption
-        monthly_m3: float | None = None
+        # Enrich: monthly response — single call covers daily, weekly, and monthly sensors.
+        # SAUR /consumptions/monthly returns every day of the month as a Day entry,
+        # pre-populated with value=0 for future days.  We derive:
+        #   daily_liters  — last Day entry with value > 0
+        #   weekly_m3     — sum of Day entries whose startDate falls in the current ISO week
+        #   monthly_m3    — sum of all non-zero Day entries
+        # On days 1-2 of a new month yesterday may still be in the previous month, so we
+        # fall back to the previous month's data when the current month has no entries yet.
+        raw_monthly: dict[str, Any] = {}
         try:
             raw_monthly = await self._client.async_get_monthly(
                 subscription_id, now.year, now.month
             )
-            monthly_m3 = _extract_period_m3(raw_monthly)
+            # Fallback: if current month has no data (start of month), try previous month
+            if not _has_nonzero_day(raw_monthly):
+                prev = (now.replace(day=1) - timedelta(days=1))
+                raw_monthly = await self._client.async_get_monthly(
+                    subscription_id, prev.year, prev.month
+                )
         except SauronAuthError as err:
             raise ConfigEntryAuthFailed from err
         except Exception as err:
-            _LOGGER.debug("Could not fetch monthly data for %s: %s", subscription_id, err)
+            _LOGGER.warning("Could not fetch monthly data for %s: %s", subscription_id, err)
+
+        daily_liters = _extract_daily_liters(raw_monthly)
+        weekly_m3 = _extract_week_total_from_monthly(raw_monthly, yesterday)
+        monthly_m3 = _extract_period_m3(raw_monthly)
 
         # Enrich: yearly consumption
         yearly_m3: float | None = None
@@ -110,11 +109,6 @@ class SauronCoordinator(DataUpdateCoordinator[SauronData]):
             raise ConfigEntryAuthFailed from err
         except Exception as err:
             _LOGGER.debug("Could not fetch yearly data for %s: %s", subscription_id, err)
-
-        # Enrich: weekly total — reuse the already-fetched weekly response
-        weekly_m3: float | None = None
-        if weekly_raw_for_weekly is not None:
-            weekly_m3 = _extract_week_total_m3(weekly_raw_for_weekly)
 
         enriched = SauronData(
             meter_info=data.meter_info,
@@ -195,10 +189,18 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
-def _extract_daily_liters(raw: dict[str, Any]) -> float | None:
-    """Extract the most recent non-zero daily consumption in litres from a weekly response.
+def _has_nonzero_day(raw: dict[str, Any]) -> bool:
+    """Return True if the response contains at least one Day entry with value > 0."""
+    return any(
+        isinstance(c, dict) and c.get("rangeType") == "Day" and _safe_float(c.get("value")) > 0
+        for c in raw.get("consumptions", [])
+    )
 
-    Real API response shape:
+
+def _extract_daily_liters(raw: dict[str, Any]) -> float | None:
+    """Extract the most recent non-zero daily consumption in litres from a monthly response.
+
+    Real API response shape (from /consumptions/monthly):
       { "consumptions": [{ "startDate": "...", "value": 0.085, "rangeType": "Day" }] }
 
     Takes the last Day entry with value > 0 (future days are pre-populated with 0).
@@ -216,16 +218,49 @@ def _extract_daily_liters(raw: dict[str, Any]) -> float | None:
     if not day_entries:
         return None
 
-    last = day_entries[-1]
-    value_m3 = last.get("value")
+    value_m3 = day_entries[-1].get("value")
     if value_m3 is None:
         return None
-
     return round(_safe_float(value_m3) * 1000, 1)
 
 
+def _extract_week_total_from_monthly(raw: dict[str, Any], ref_date: date) -> float | None:
+    """Sum Day entries from the ISO week containing ref_date, using a monthly response.
+
+    ref_date is typically yesterday (J-1). We sum only entries whose startDate falls
+    in the same ISO week (Monday to Sunday) as ref_date.
+    """
+    consumptions = raw.get("consumptions", [])
+    if not isinstance(consumptions, list):
+        return None
+
+    monday = ref_date - timedelta(days=ref_date.weekday())
+    sunday = monday + timedelta(days=6)
+
+    week_entries = []
+    for c in consumptions:
+        if not isinstance(c, dict) or c.get("rangeType") != "Day":
+            continue
+        value = _safe_float(c.get("value"))
+        if value <= 0:
+            continue
+        try:
+            entry_date = date.fromisoformat(str(c.get("startDate", ""))[:10])
+        except (ValueError, TypeError):
+            continue
+        if monday <= entry_date <= sunday:
+            week_entries.append(value)
+
+    if not week_entries:
+        return None
+    return round(sum(week_entries), 3)
+
+
 def _extract_week_total_m3(raw: dict[str, Any]) -> float | None:
-    """Sum all non-zero Day entries in a weekly response to get total week volume in m³."""
+    """Sum all non-zero Day entries in a weekly response to get total week volume in m³.
+
+    Kept for backward-compatibility with existing tests.
+    """
     consumptions = raw.get("consumptions", [])
     if not isinstance(consumptions, list):
         return None
