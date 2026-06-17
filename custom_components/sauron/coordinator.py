@@ -57,10 +57,10 @@ class SauronCoordinator(DataUpdateCoordinator[SauronData]):
         """Fetch latest data from the SAUR API."""
         subscription_id: str = self.config_entry.data[CONF_SUBSCRIPTION_ID]
         now = datetime.now(UTC)
-        # SAUR data is always J-1: query yesterday to get certified available data
+        # SAUR data is always J-1: query J-2 to match the portal's own behaviour
+        # (the portal uses day-before-yesterday to avoid missing data for yesterday)
         yesterday = (now.date() - timedelta(days=1))
-        # Weekly endpoint may lag — also try previous week as fallback
-        last_week = (now.date() - timedelta(days=7))
+        query_date = (now.date() - timedelta(days=2))
 
         # Primary: latest meter index
         try:
@@ -75,20 +75,15 @@ class SauronCoordinator(DataUpdateCoordinator[SauronData]):
 
         data = _parse_last_index(subscription_id, raw_index, now)
 
-        # Enrich: daily consumption — query the week containing yesterday, fallback to previous week
+        # Enrich: daily + weekly — query week containing J-2 (portal behaviour)
         daily_liters: float | None = None
+        weekly_raw_for_weekly: dict | None = None
         try:
             raw_weekly = await self._client.async_get_weekly(
-                subscription_id, yesterday.year, yesterday.month, yesterday.day
+                subscription_id, query_date.year, query_date.month, query_date.day
             )
-            _LOGGER.error("SAURon weekly(yesterday) len=%s", len(raw_weekly.get("consumptions", [])) if isinstance(raw_weekly, dict) else "N/A")
-            if isinstance(raw_weekly, dict) and not raw_weekly.get("consumptions"):
-                # Current week has no data yet — try previous week
-                raw_weekly = await self._client.async_get_weekly(
-                    subscription_id, last_week.year, last_week.month, last_week.day
-                )
-                _LOGGER.error("SAURon weekly(last_week) len=%s full=%s", len(raw_weekly.get("consumptions", [])) if isinstance(raw_weekly, dict) else "N/A", str(raw_weekly)[:300])
             daily_liters = _extract_daily_liters(raw_weekly)
+            weekly_raw_for_weekly = raw_weekly
         except SauronAuthError:
             raise  # re-raise auth errors (will be caught by HA)
         except Exception as err:
@@ -116,15 +111,10 @@ class SauronCoordinator(DataUpdateCoordinator[SauronData]):
         except Exception as err:
             _LOGGER.debug("Could not fetch yearly data for %s: %s", subscription_id, err)
 
-        # Enrich: weekly total — sum all Day entries from the week containing yesterday
+        # Enrich: weekly total — reuse the already-fetched weekly response
         weekly_m3: float | None = None
-        try:
-            raw_weekly2 = await self._client.async_get_weekly(
-                subscription_id, yesterday.year, yesterday.month, yesterday.day
-            )
-            weekly_m3 = _extract_week_total_m3(raw_weekly2)
-        except Exception as err:
-            _LOGGER.debug("Could not compute weekly total for %s: %s", subscription_id, err)
+        if weekly_raw_for_weekly is not None:
+            weekly_m3 = _extract_week_total_m3(weekly_raw_for_weekly)
 
         enriched = SauronData(
             meter_info=data.meter_info,
@@ -198,12 +188,13 @@ def _parse_last_index(
 
 
 def _extract_daily_liters(raw: dict[str, Any]) -> float | None:
-    """Extract yesterday's consumption in litres from a weekly response.
+    """Extract the most recent non-zero daily consumption in litres from a weekly response.
 
     Real API response shape:
       { "consumptions": [{ "startDate": "...", "value": 0.085, "rangeType": "Day" }] }
 
-    Returns None if no Day entry found or value is negative.
+    Takes the last Day entry with value > 0 (future days are pre-populated with 0).
+    Returns None if no non-zero Day entry found.
     """
     consumptions = raw.get("consumptions", [])
     if not isinstance(consumptions, list):
@@ -212,13 +203,14 @@ def _extract_daily_liters(raw: dict[str, Any]) -> float | None:
     day_entries = [
         c for c in consumptions
         if isinstance(c, dict) and c.get("rangeType") == "Day"
+        and float(c.get("value", 0)) > 0
     ]
     if not day_entries:
         return None
 
     last = day_entries[-1]
     value_m3 = last.get("value")
-    if value_m3 is None or float(value_m3) < 0:
+    if value_m3 is None:
         return None
 
     return round(float(value_m3) * 1000, 1)
