@@ -15,15 +15,15 @@ Monitor your [SAUR](https://www.saur.fr) water consumption directly in Home Assi
 
 - **7 sensor entities** per meter subscription:
 
-| Entity | Unit | Description |
-|---|---|---|
-| Water index | m³ | Absolute meter reading (feeds Energy Dashboard → Water) |
-| Last reading date | date | Date of the latest SAUR reading |
-| Daily consumption | L | Yesterday's usage |
-| Weekly consumption | m³ | Current week total |
-| Monthly consumption | m³ | Current month total |
-| Yearly consumption | m³ | Current year total |
-| Data age *(diagnostic)* | h | Hours since last API poll |
+| Entity (FR name) | Entity ID suffix | Unit | Description |
+|---|---|---|---|
+| Index eau | `index_eau` | m³ | Absolute meter reading (feeds Energy Dashboard → Water) |
+| Date dernier relevé | `date_dernier_releve` | date | Date of the latest SAUR reading |
+| Consommation J-1 | `consommation_journaliere` | L | Most recent daily usage (last day with data > 0) |
+| Consommation semaine courante | `consommation_hebdomadaire` | m³ | Current week total (days with data) |
+| Consommation mensuelle | `consommation_mensuelle` | m³ | Current month total |
+| Consommation annuelle | `consommation_annuelle` | m³ | Current year total |
+| Âge des données *(diagnostic)* | `age_des_donnees` | h | Hours since last API poll |
 
 - **Energy Dashboard** compatible — add `Water index` to **Settings → Energy → Water**
 - **Re-authentication flow** — seamless credential update without removing the integration
@@ -81,11 +81,11 @@ After setup, click **Configure** on the integration card to adjust:
 
 ## Energy Dashboard
 
-Add the **Water index** sensor to the HA Energy Dashboard:
+Add the **Index eau** sensor to the HA Energy Dashboard:
 
 1. Go to **Settings → Energy**
 2. Under **Water**, click **Add water source**
-3. Select `sensor.saur_water_meter_water_index`
+3. Select `sensor.saur_water_meter_index_eau`
 4. Save
 
 HA will automatically track cumulative water consumption over time.
@@ -98,10 +98,10 @@ For daily/weekly/monthly resets independent of the SAUR API:
 # configuration.yaml
 utility_meter:
   water_daily:
-    source: sensor.saur_water_meter_water_index
+    source: sensor.saur_water_meter_index_eau
     cycle: daily
   water_monthly:
-    source: sensor.saur_water_meter_water_index
+    source: sensor.saur_water_meter_index_eau
     cycle: monthly
 ```
 
@@ -110,8 +110,14 @@ utility_meter:
 ## Data freshness
 
 SAUR transmits meter readings once per day, typically between midnight and 6 AM.
-The `Daily consumption` sensor will show **Unknown** until the reading for J−1 arrives.
-This is expected behaviour — not a bug.
+
+**How daily/weekly data works:**
+- The SAUR API pre-populates the current week with `value=0` for days that haven't transmitted yet
+- The integration queries J-2 (day before yesterday) to get the last day with real data — matching the behaviour of the SAUR web portal
+- `Consommation J-1` shows the most recent day with a non-zero reading
+- `Consommation semaine courante` sums only the days with real data in the current week
+
+This means sensors may show data from 1-2 days ago — this is expected behaviour, not a bug.
 
 ---
 
