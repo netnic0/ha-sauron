@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.5](https://github.com/netnic0/ha-sauron/compare/ha-sauron-v0.2.4...ha-sauron-v0.2.5) (2026-06-17)
+
+
+### Bug Fixes
+
+* **sensor:** use TOTAL state_class for daily_liters ([fa09344](https://github.com/netnic0/ha-sauron/commit/fa093448cb3528c0ccafbffb6529e9060cd2af01))
+* **sensor:** use TOTAL state_class for daily_liters (device_class=WATER requires TOTAL or TOTAL_INCREASING) ([eb69be4](https://github.com/netnic0/ha-sauron/commit/eb69be40acd994ebd19a545bd06d15bc1cc47720))
+
 ## [0.2.4](https://github.com/netnic0/ha-sauron/compare/ha-sauron-v0.2.3...ha-sauron-v0.2.4) (2026-06-16)
 
 
