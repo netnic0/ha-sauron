@@ -17,10 +17,22 @@ class MeterInfo:
     """Delivery point address (human-readable)."""
 
     meter_serial: str
-    """Physical meter serial number."""
+    """Physical meter serial number (serialNumber field from API)."""
 
     installation_date: date | None
     """Date the meter was installed, or None if unknown."""
+
+    meter_brand: str = ""
+    """Meter hardware manufacturer (meterBrandCode, e.g. 'ELSTER (MID)')."""
+
+    meter_model: str = ""
+    """Meter model (meterModelCode, e.g. 'tModele 156')."""
+
+    meter_diameter: str = ""
+    """Meter pipe diameter (meterDiameterCode, e.g. '15mm')."""
+
+    telereleve_tech: str = ""
+    """Remote reading technology (pairingTechnologyCode, e.g. 'TeleCoronis')."""
 
 
 @dataclass(frozen=True, slots=True)
