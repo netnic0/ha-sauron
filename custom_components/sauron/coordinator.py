@@ -84,8 +84,8 @@ class SauronCoordinator(DataUpdateCoordinator[SauronData]):
             )
             daily_liters = _extract_daily_liters(raw_weekly)
             weekly_raw_for_weekly = raw_weekly
-        except SauronAuthError:
-            raise  # re-raise auth errors (will be caught by HA)
+        except SauronAuthError as err:
+            raise ConfigEntryAuthFailed from err
         except Exception as err:
             _LOGGER.warning("Could not fetch weekly data for %s: %s", subscription_id, err)
 
@@ -96,8 +96,8 @@ class SauronCoordinator(DataUpdateCoordinator[SauronData]):
                 subscription_id, now.year, now.month
             )
             monthly_m3 = _extract_period_m3(raw_monthly)
-        except SauronAuthError:
-            raise
+        except SauronAuthError as err:
+            raise ConfigEntryAuthFailed from err
         except Exception as err:
             _LOGGER.debug("Could not fetch monthly data for %s: %s", subscription_id, err)
 
@@ -106,8 +106,8 @@ class SauronCoordinator(DataUpdateCoordinator[SauronData]):
         try:
             raw_yearly = await self._client.async_get_yearly(subscription_id, now.year)
             yearly_m3 = _extract_period_m3(raw_yearly)
-        except SauronAuthError:
-            raise
+        except SauronAuthError as err:
+            raise ConfigEntryAuthFailed from err
         except Exception as err:
             _LOGGER.debug("Could not fetch yearly data for %s: %s", subscription_id, err)
 
@@ -187,6 +187,14 @@ def _parse_last_index(
     return SauronData(meter_info=meter_info, latest_reading=reading)
 
 
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    """Convert value to float, returning default on failure."""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def _extract_daily_liters(raw: dict[str, Any]) -> float | None:
     """Extract the most recent non-zero daily consumption in litres from a weekly response.
 
@@ -203,7 +211,7 @@ def _extract_daily_liters(raw: dict[str, Any]) -> float | None:
     day_entries = [
         c for c in consumptions
         if isinstance(c, dict) and c.get("rangeType") == "Day"
-        and float(c.get("value", 0)) > 0
+        and _safe_float(c.get("value")) > 0
     ]
     if not day_entries:
         return None
@@ -213,11 +221,11 @@ def _extract_daily_liters(raw: dict[str, Any]) -> float | None:
     if value_m3 is None:
         return None
 
-    return round(float(value_m3) * 1000, 1)
+    return round(_safe_float(value_m3) * 1000, 1)
 
 
 def _extract_week_total_m3(raw: dict[str, Any]) -> float | None:
-    """Sum all Day entries in a weekly response to get total week volume in m³."""
+    """Sum all non-zero Day entries in a weekly response to get total week volume in m³."""
     consumptions = raw.get("consumptions", [])
     if not isinstance(consumptions, list):
         return None
@@ -225,11 +233,12 @@ def _extract_week_total_m3(raw: dict[str, Any]) -> float | None:
     day_entries = [
         c for c in consumptions
         if isinstance(c, dict) and c.get("rangeType") == "Day"
+        and _safe_float(c.get("value")) > 0
     ]
     if not day_entries:
         return None
 
-    total = sum(float(c.get("value", 0)) for c in day_entries if float(c.get("value", 0)) >= 0)
+    total = sum(_safe_float(c.get("value")) for c in day_entries)
     return round(total, 3)
 
 

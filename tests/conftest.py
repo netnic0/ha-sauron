@@ -46,12 +46,21 @@ def mock_saur_data(mock_meter_info: MeterInfo, mock_reading: MeterReading) -> Sa
 def mock_api_client() -> AsyncMock:
     client = AsyncMock()
     client.async_authenticate = AsyncMock()
-    client.async_get_latest_consumption = AsyncMock(
+    client.async_get_meter_last_index = AsyncMock(
         return_value={
-            "index": 1234.567,
-            "date": "2026-06-15",
-            "address": "1 rue de la Paix, 75001 Paris",
-            "meterSerial": "METER123456",
+            "indexValue": 1234.567,
+            "readingDate": "2026-06-15T00:00:00",
         }
     )
+    client.async_get_weekly = AsyncMock(
+        return_value={
+            "consumptions": [
+                {"startDate": "2026-06-09T00:00:00", "endDate": "2026-06-10T00:00:00", "value": 0.085, "rangeType": "Day"},
+                {"startDate": "2026-06-10T00:00:00", "endDate": "2026-06-11T00:00:00", "value": 0.092, "rangeType": "Day"},
+            ],
+            "isRemoteReading": True,
+        }
+    )
+    client.async_get_monthly = AsyncMock(return_value={"consumptions": []})
+    client.async_get_yearly = AsyncMock(return_value={"consumptions": []})
     return client
