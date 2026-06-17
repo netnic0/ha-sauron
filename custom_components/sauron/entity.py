@@ -41,3 +41,30 @@ class SauronMeterEntity(CoordinatorEntity["SauronCoordinator"]):
             configuration_url="https://mon-espace.saurclient.fr",
             suggested_area=area,
         )
+
+    @property
+    def extra_state_attributes(self) -> dict | None:
+        """Expose meter hardware metadata as entity attributes.
+
+        This allows Lovelace 'type: attribute' rows to display serial_number,
+        manufacturer and model without relying on device_attr() Jinja templates,
+        which are not supported by the visual card editor.
+        """
+        data = self.coordinator.data
+        if data is None:
+            return None
+        info = data.meter_info
+        attrs: dict = {}
+        if info.meter_serial:
+            attrs["serial_number"] = info.meter_serial
+        if info.meter_brand:
+            attrs["manufacturer"] = info.meter_brand
+        if info.meter_model:
+            attrs["model"] = info.meter_model
+        if info.meter_diameter:
+            attrs["diameter"] = info.meter_diameter
+        if info.telereleve_tech:
+            attrs["telereleve"] = info.telereleve_tech
+        if info.address:
+            attrs["address"] = info.address
+        return attrs or None

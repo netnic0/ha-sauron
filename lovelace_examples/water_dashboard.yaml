@@ -240,7 +240,7 @@ views:
                 group_by:
                   func: diff
                   duration: 1d
-                  fill: zero
+                  fill: last
                 show:
                   legend_value: false
 
@@ -322,7 +322,7 @@ views:
                 group_by:
                   func: diff
                   duration: 1d
-                  fill: zero
+                  fill: last
                 show:
                   legend_value: true
                   name_in_header: true
@@ -528,23 +528,40 @@ views:
                   font-size: 0.9em;
                 }
             entities:
-              - type: attribute
-                entity: sensor.saur_water_meter_index_eau
-                attribute: friendly_name
+              # L'abonnement est le nom de l'appareil HA (visible dans l'en-tete)
+              - entity: sensor.saur_water_meter_index_eau
                 name: "Abonnement"
                 icon: mdi:identifier
 
-              - type: template
-                value_template: "{{ device_attr(device_id('sensor.saur_water_meter_index_eau'), 'serial_number') or 'N/A' }}"
-                name: "N\xB0 de serie"
+              # serial_number, manufacturer, model sont exposes comme attributs
+              # d'entite depuis v0.3.x (extra_state_attributes dans entity.py).
+              # Ils sont accessibles via type: attribute sans device_attr() Jinja.
+              - type: attribute
+                entity: sensor.saur_water_meter_index_eau
+                attribute: serial_number
+                name: "N° de serie"
                 icon: mdi:barcode
 
-              - type: template
-                value_template: "{{ device_attr(device_id('sensor.saur_water_meter_index_eau'), 'manufacturer') or 'N/A' }}"
+              - type: attribute
+                entity: sensor.saur_water_meter_index_eau
+                attribute: manufacturer
                 name: "Fabricant"
                 icon: mdi:factory
 
-              - type: template
-                value_template: "{{ device_attr(device_id('sensor.saur_water_meter_index_eau'), 'model') or 'N/A' }}"
+              - type: attribute
+                entity: sensor.saur_water_meter_index_eau
+                attribute: model
                 name: "Modele"
                 icon: mdi:tag-outline
+
+              - type: attribute
+                entity: sensor.saur_water_meter_index_eau
+                attribute: diameter
+                name: "Diametre"
+                icon: mdi:pipe
+
+              - type: attribute
+                entity: sensor.saur_water_meter_index_eau
+                attribute: telereleve
+                name: "Telereleve"
+                icon: mdi:antenna
