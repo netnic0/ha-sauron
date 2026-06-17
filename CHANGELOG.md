@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0](https://github.com/netnic0/ha-sauron/compare/ha-sauron-v0.3.0...ha-sauron-v0.4.0) (2026-06-17)
+
+
+### Features
+
+* **device:** enrich device info + water dashboard improvements ([2462bbd](https://github.com/netnic0/ha-sauron/commit/2462bbde21232394ed0cd2393d10e26930fe3183))
+* **device:** enrich DeviceInfo with meter hardware metadata from delivery_points ([502c5d9](https://github.com/netnic0/ha-sauron/commit/502c5d94c6ac1002a16295bf9d6296ab48e0145a))
+* **lovelace:** add meter hardware info section to water dashboard ([46aac6a](https://github.com/netnic0/ha-sauron/commit/46aac6a35d5eba5ee2e8bd87d6bf3d6e69fe7fd6))
+
+## [0.3.0](https://github.com/netnic0/ha-sauron/compare/ha-sauron-v0.2.7...ha-sauron-v0.3.0) (2026-06-17)
+
+
+### Features
+
+* **coordinator:** use monthly endpoint for daily/weekly/monthly sensors ([a1b1ce2](https://github.com/netnic0/ha-sauron/commit/a1b1ce2922bc7759a0474b95324f834ca93243cc))
+* **lovelace:** add water consumption dashboard blueprint ([5048521](https://github.com/netnic0/ha-sauron/commit/5048521bb7660b18c8d04eb7c0bcb2591e9ca0b2))
+
+## [0.2.7](https://github.com/netnic0/ha-sauron/compare/ha-sauron-v0.2.6...ha-sauron-v0.2.7) (2026-06-17)
+
+
+### Bug Fixes
+
+* **integration:** address P0/P1 code review findings ([3b8b42c](https://github.com/netnic0/ha-sauron/commit/3b8b42cdda6765e7098f7d114d25776e5565c5ec))
+* **integration:** address P0/P1 code review findings ([88470d6](https://github.com/netnic0/ha-sauron/commit/88470d677d981a5d4686966b5d98e2b56565edcd))
+
 ## [0.2.6](https://github.com/netnic0/ha-sauron/compare/ha-sauron-v0.2.5...ha-sauron-v0.2.6) (2026-06-17)
 
 
