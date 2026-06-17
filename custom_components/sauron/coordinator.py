@@ -84,7 +84,7 @@ class SauronCoordinator(DataUpdateCoordinator[SauronData]):
         except SauronAuthError:
             raise  # re-raise auth errors (will be caught by HA)
         except Exception as err:
-            _LOGGER.debug("Could not fetch weekly data for %s: %s", subscription_id, err)
+            _LOGGER.warning("Could not fetch weekly data for %s: %s", subscription_id, err)
 
         # Enrich: monthly consumption
         monthly_m3: float | None = None

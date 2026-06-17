@@ -43,7 +43,7 @@ METER_SENSORS: tuple[SensorEntityDescription, ...] = (
         key="daily_liters",
         translation_key="daily_liters",
         device_class=SensorDeviceClass.WATER,
-        state_class=SensorStateClass.MEASUREMENT,
+        state_class=SensorStateClass.TOTAL,
         native_unit_of_measurement=UnitOfVolume.LITERS,
         suggested_display_precision=0,
     ),
