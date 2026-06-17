@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0](https://github.com/netnic0/ha-sauron/compare/ha-sauron-v0.2.7...ha-sauron-v0.3.0) (2026-06-17)
+
+
+### Features
+
+* **coordinator:** use monthly endpoint for daily/weekly/monthly sensors ([a1b1ce2](https://github.com/netnic0/ha-sauron/commit/a1b1ce2922bc7759a0474b95324f834ca93243cc))
+* **lovelace:** add water consumption dashboard blueprint ([5048521](https://github.com/netnic0/ha-sauron/commit/5048521bb7660b18c8d04eb7c0bcb2591e9ca0b2))
+
 ## [0.2.7](https://github.com/netnic0/ha-sauron/compare/ha-sauron-v0.2.6...ha-sauron-v0.2.7) (2026-06-17)
 
 
