@@ -13,7 +13,7 @@ from homeassistant.helpers.issue_registry import IssueSeverity, async_create_iss
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import SauronApiClient, SauronAuthError, SauronData
-from .api.exceptions import SauronNoDataError
+from .api.exceptions import SauronNoDataError, SauronTransientError
 from .api.models import MeterInfo, MeterReading
 from .const import (
     CONF_SUBSCRIPTION_ID,
@@ -80,6 +80,8 @@ class SauronCoordinator(DataUpdateCoordinator[SauronData]):
             raw_index = await self._client.async_get_meter_last_index(subscription_id)
         except SauronAuthError as err:
             raise ConfigEntryAuthFailed from err
+        except SauronTransientError as err:
+            raise UpdateFailed(f"SAUR API transient error: {err}") from err
         except SauronNoDataError as err:
             _LOGGER.warning("Unexpected SAUR payload for %s: %s", subscription_id, err)
             raise UpdateFailed(f"SAUR payload error: {err}") from err
@@ -109,6 +111,12 @@ class SauronCoordinator(DataUpdateCoordinator[SauronData]):
                 )
         except SauronAuthError as err:
             raise ConfigEntryAuthFailed from err
+        except SauronTransientError as err:
+            # Enrichment is non-fatal: log and continue with primary data only.
+            _LOGGER.warning(
+                "SAUR monthly transient error for %s: %s — skipping enrichment",
+                subscription_id, err,
+            )
         except Exception as err:
             _LOGGER.warning("Could not fetch monthly data for %s: %s", subscription_id, err)
 
@@ -123,6 +131,11 @@ class SauronCoordinator(DataUpdateCoordinator[SauronData]):
             yearly_m3 = _extract_period_m3(raw_yearly)
         except SauronAuthError as err:
             raise ConfigEntryAuthFailed from err
+        except SauronTransientError as err:
+            _LOGGER.debug(
+                "SAUR yearly transient error for %s: %s — skipping yearly enrichment",
+                subscription_id, err,
+            )
         except Exception as err:
             _LOGGER.debug("Could not fetch yearly data for %s: %s", subscription_id, err)
 
