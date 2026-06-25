@@ -21,3 +21,11 @@ class SauronApiError(SauronError):
 
 class SauronNoDataError(SauronError):
     """The API returned an empty or unexpected payload."""
+
+
+class SauronTransientError(SauronError):
+    """Temporary failure (network, 5xx, auth endpoint flaky).
+
+    Maps to UpdateFailed (yellow banner) in the coordinator — must NEVER
+    be mistaken for a credentials problem.  See Plan A §3.4.
+    """

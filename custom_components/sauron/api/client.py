@@ -1,17 +1,26 @@
 """Async HTTP client for the SAUR API (apib2c.azure.saurclient.fr).
 
 Authentication flow:
-  POST /admin/v2/auth  →  { token: { access_token }, clientId, defaultSectionId }
+  POST /admin/v2/auth  →  { token: { access_token }, clientId, defaultSectionId,
+                           expires_in? }
 
 The reCAPTCHA v3 field accepted by the API is a literal string "true",
 not a real token — the server-side check is not enforced for non-browser
 clients. We replicate the same payload as the official web app.
 
-Token lifecycle:
-  - Stored in memory only (never persisted to config entry)
-  - Re-authenticated on 401/403 (one retry then raises SauronAuthError)
-  - On SauronAuthError, the coordinator raises ConfigEntryAuthFailed
-    which triggers HA's native re-authentication flow
+Token lifecycle (Plan A):
+  - Token stored in a TokenCache value object with an absolute expiry.
+  - If the SAUR response includes ``expires_in`` we use it; otherwise we
+    fall back to DEFAULT_TOKEN_TTL_S.
+  - Re-authentication is triggered:
+      * lazily when the cache is invalid or near expiry
+        (TOKEN_REFRESH_MARGIN_S guard, double-checked under an asyncio.Lock),
+      * reactively on 401/403 from any data endpoint (one retry).
+  - On the retry path we distinguish *transient* failures (network /
+    5xx from the auth endpoint itself) from *real* auth failures.
+    Only the latter raise SauronAuthError → ConfigEntryAuthFailed.
+  - The optional ``on_token_refreshed`` callback lets the HA layer
+    persist the cache to ``entry.data`` so it survives restarts.
 
 Field names are sourced from reverse-engineering the eyeonsaur-ha integration
 and the Saur_fr_client library (https://github.com/cekage/Saur_fr_client).
@@ -19,12 +28,22 @@ and the Saur_fr_client library (https://github.com/cekage/Saur_fr_client).
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from typing import Any
 
 import aiohttp
 
-from .exceptions import SauronApiError, SauronAuthError, SauronNoDataError
+from ..const import DEFAULT_TOKEN_TTL_S, TOKEN_REFRESH_MARGIN_S
+from .exceptions import (
+    SauronApiError,
+    SauronAuthError,
+    SauronNoDataError,
+    SauronTransientError,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -39,6 +58,20 @@ _CONSUMPTIONS_MONTHLY_ENDPOINT = "/deli/section_subscription/{section_id}/consum
 _CONSUMPTIONS_YEARLY_ENDPOINT = "/deli/section_subscription/{section_id}/consumptions/yearly"
 
 
+@dataclass(frozen=True, slots=True)
+class TokenCache:
+    """Bearer token + identifiers + absolute expiry.
+
+    Stored in memory and (optionally) persisted to ``entry.data`` so it
+    survives Home Assistant restarts.  ``expires_at`` is epoch seconds.
+    """
+
+    access_token: str
+    expires_at: float
+    client_id: str
+    default_section_id: str
+
+
 class SauronApiClient:
     """Async SAUR API client — one instance per config entry."""
 
@@ -47,13 +80,16 @@ class SauronApiClient:
         session: aiohttp.ClientSession,
         login: str,
         password: str,
+        *,
+        initial_token: TokenCache | None = None,
+        on_token_refreshed: Callable[[TokenCache], Awaitable[None]] | None = None,
     ) -> None:
         self._session = session
         self._login = login
         self._password = password
-        self._token: str | None = None
-        self._client_id: str | None = None
-        self._default_section_id: str | None = None
+        self._cache: TokenCache | None = initial_token
+        self._on_token_refreshed = on_token_refreshed
+        self._auth_lock: asyncio.Lock = asyncio.Lock()
 
     # ── Authentication ────────────────────────────────────────────────────────
 
@@ -64,7 +100,8 @@ class SauronApiClient:
         Raises SauronApiError on unexpected HTTP errors.
 
         Response structure:
-          { "token": { "access_token": "..." }, "clientId": "...", "defaultSectionId": "..." }
+          { "token": { "access_token": "..." }, "clientId": "...",
+            "defaultSectionId": "...", "expires_in"?: int }
         """
         payload = {
             "username": self._login,
@@ -86,65 +123,133 @@ class SauronApiClient:
 
         # Extract token from nested {"token": {"access_token": "..."}}
         token_obj = data.get("token") or {}
-        token = token_obj.get("access_token") if isinstance(token_obj, dict) else None
-        if not token:
+        access_token = token_obj.get("access_token") if isinstance(token_obj, dict) else None
+        if not access_token:
             raise SauronAuthError("No access_token in auth response")
 
-        self._token = token
-        self._client_id = str(data.get("clientId", ""))
-        self._default_section_id = str(data.get("defaultSectionId", ""))
-        _LOGGER.debug(
-            "SAUR authenticated: client_id=%s, default_section_id=%s",
-            self._client_id,
-            self._default_section_id,
+        # TTL: prefer the server-emitted expires_in, fall back to a safe default.
+        raw_ttl = data.get("expires_in")
+        try:
+            ttl_s = int(raw_ttl) if raw_ttl is not None else DEFAULT_TOKEN_TTL_S
+        except (TypeError, ValueError):
+            ttl_s = DEFAULT_TOKEN_TTL_S
+
+        self._cache = TokenCache(
+            access_token=str(access_token),
+            expires_at=time.time() + ttl_s,
+            client_id=str(data.get("clientId", "")),
+            default_section_id=str(data.get("defaultSectionId", "")),
         )
+
+        # Probe response shape — Plan A §0: confirm whether SAUR emits expires_in.
+        # Drives the choice between a real TTL and the DEFAULT_TOKEN_TTL_S fallback.
+        _LOGGER.debug(
+            "SAUR auth response keys=%s expires_in=%s",
+            list(data.keys()),
+            raw_ttl,
+        )
+        _LOGGER.debug(
+            "SAUR authenticated: client_id=%s, default_section_id=%s, ttl_s=%d",
+            self._cache.client_id,
+            self._cache.default_section_id,
+            ttl_s,
+        )
+
+        if self._on_token_refreshed is not None:
+            await self._on_token_refreshed(self._cache)
 
     @property
     def client_id(self) -> str | None:
-        return self._client_id
+        return self._cache.client_id if self._cache else None
 
     @property
     def default_section_id(self) -> str | None:
-        return self._default_section_id
+        return self._cache.default_section_id if self._cache else None
 
     def _is_token_valid(self) -> bool:
-        return bool(self._token)
+        """Return True iff we have a non-expired cached token (with margin)."""
+        return (
+            self._cache is not None
+            and time.time() < self._cache.expires_at - TOKEN_REFRESH_MARGIN_S
+        )
 
     async def _ensure_token(self) -> str:
-        if not self._is_token_valid():
+        """Return a valid bearer token, authenticating if necessary.
+
+        Uses a double-checked pattern under self._auth_lock so two concurrent
+        callers cannot trigger two POST /auth calls.  The fast path (valid
+        cached token) does NOT take the lock.
+        """
+        if self._is_token_valid():
+            assert self._cache is not None
+            return self._cache.access_token
+
+        async with self._auth_lock:
+            # Re-check under the lock — another task may have just authenticated.
+            if self._is_token_valid():
+                assert self._cache is not None
+                return self._cache.access_token
             await self.async_authenticate()
-        assert self._token is not None  # noqa: S101
-        return self._token
+
+        assert self._cache is not None
+        return self._cache.access_token
 
     # ── Generic request helper ────────────────────────────────────────────────
 
     async def _get(self, path: str, params: dict[str, Any] | None = None) -> Any:
-        """GET with automatic token refresh on 401."""
-        token = await self._ensure_token()
-        headers = {"Authorization": f"Bearer {token}"}
+        """GET with automatic token refresh on 401/403.
 
-        async with self._session.get(
-            f"{_BASE_URL}{path}", headers=headers, params=params
-        ) as resp:
-            if resp.status not in (401, 403):
+        Two-tier handling distinguishes transient auth-endpoint failures
+        from genuine credentials problems (Plan A §3.3).
+        """
+        token = await self._ensure_token()
+        status, body = await self._do_get(path, token, params)
+
+        if status not in (401, 403):
+            return body
+
+        # First 401/403: token may have expired silently. Force re-auth, retry once.
+        _LOGGER.debug("Token rejected (%d) on %s — refreshing", status, path)
+        self._cache = None
+        try:
+            await self.async_authenticate()
+        except SauronAuthError:
+            # The auth endpoint itself rejected our credentials → user must reauth.
+            raise
+        except SauronApiError as err:
+            # The auth endpoint returned 5xx / unexpected — transient, NOT a
+            # credentials problem.  Let the coordinator surface UpdateFailed.
+            raise SauronTransientError(f"Auth refresh failed: {err}") from err
+
+        assert self._cache is not None
+        status2, body2 = await self._do_get(path, self._cache.access_token, params)
+        if status2 in (401, 403):
+            # A freshly-minted token was rejected → credentials really are dead.
+            raise SauronAuthError(f"Endpoint {path} rejected fresh token")
+        return body2
+
+    async def _do_get(
+        self, path: str, token: str, params: dict[str, Any] | None
+    ) -> tuple[int, Any]:
+        """Issue a single GET and return (status, body).
+
+        - Returns (200, parsed_json) on success.
+        - Returns (401, None) or (403, None) so the caller can decide.
+        - Raises SauronApiError on any other non-2xx.
+        - Raises SauronTransientError on aiohttp.ClientError / TimeoutError.
+        """
+        headers = {"Authorization": f"Bearer {token}"}
+        try:
+            async with self._session.get(
+                f"{_BASE_URL}{path}", headers=headers, params=params
+            ) as resp:
+                if resp.status in (401, 403):
+                    return resp.status, None
                 if resp.status != 200:
                     raise SauronApiError(resp.status, await resp.text())
-                return await resp.json()
-
-        # Token rejected — retry once after re-auth
-        _LOGGER.debug("Token rejected (%d), re-authenticating", resp.status)
-        self._token = None
-        await self.async_authenticate()
-        headers = {"Authorization": f"Bearer {self._token}"}
-
-        async with self._session.get(
-            f"{_BASE_URL}{path}", headers=headers, params=params
-        ) as resp2:
-            if resp2.status in (401, 403):
-                raise SauronAuthError("Re-authentication failed")
-            if resp2.status != 200:
-                raise SauronApiError(resp2.status, await resp2.text())
-            return await resp2.json()
+                return resp.status, await resp.json()
+        except (TimeoutError, aiohttp.ClientError) as err:
+            raise SauronTransientError(f"Network error on {path}: {err}") from err
 
     # ── Discovery ─────────────────────────────────────────────────────────────
 
