@@ -93,6 +93,13 @@ class SauronApiClient:
         self._token = token
         self._client_id = str(data.get("clientId", ""))
         self._default_section_id = str(data.get("defaultSectionId", ""))
+        # Probe response shape — Plan A §0: confirm whether SAUR emits expires_in.
+        # Drives the choice between a real TTL and the DEFAULT_TOKEN_TTL_S fallback.
+        _LOGGER.debug(
+            "SAUR auth response keys=%s expires_in=%s",
+            list(data.keys()),
+            data.get("expires_in"),
+        )
         _LOGGER.debug(
             "SAUR authenticated: client_id=%s, default_section_id=%s",
             self._client_id,
