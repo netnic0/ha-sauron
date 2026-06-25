@@ -42,7 +42,8 @@ class TestSauronApiClientAuth:
         client = SauronApiClient(mock_session, "user@example.com", "pass")
         await client.async_authenticate()
 
-        assert client._token == "tok123"
+        assert client._cache is not None
+        assert client._cache.access_token == "tok123"
         assert client.client_id == "CLI001"
         assert client.default_section_id == "SUB9876"
         assert client._is_token_valid()

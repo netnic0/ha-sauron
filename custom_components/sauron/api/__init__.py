@@ -1,7 +1,13 @@
 """Public exports for the sauron.api sub-package."""
 
-from .client import SauronApiClient
-from .exceptions import SauronApiError, SauronAuthError, SauronError, SauronNoDataError
+from .client import SauronApiClient, TokenCache
+from .exceptions import (
+    SauronApiError,
+    SauronAuthError,
+    SauronError,
+    SauronNoDataError,
+    SauronTransientError,
+)
 from .models import ConsumptionPeriod, MeterInfo, MeterReading, SauronData
 
 __all__ = [
@@ -10,6 +16,8 @@ __all__ = [
     "SauronAuthError",
     "SauronError",
     "SauronNoDataError",
+    "SauronTransientError",
+    "TokenCache",
     "ConsumptionPeriod",
     "MeterInfo",
     "MeterReading",
