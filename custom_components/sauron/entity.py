@@ -20,7 +20,7 @@ class SauronMeterEntity(CoordinatorEntity["SauronCoordinator"]):
 
     def __init__(
         self,
-        coordinator: "SauronCoordinator",
+        coordinator: SauronCoordinator,
         translation_key: str,
     ) -> None:
         super().__init__(coordinator)

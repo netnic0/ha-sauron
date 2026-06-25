@@ -181,17 +181,17 @@ class SauronApiClient:
         cached token) does NOT take the lock.
         """
         if self._is_token_valid():
-            assert self._cache is not None  # noqa: S101
+            assert self._cache is not None
             return self._cache.access_token
 
         async with self._auth_lock:
             # Re-check under the lock — another task may have just authenticated.
             if self._is_token_valid():
-                assert self._cache is not None  # noqa: S101
+                assert self._cache is not None
                 return self._cache.access_token
             await self.async_authenticate()
 
-        assert self._cache is not None  # noqa: S101
+        assert self._cache is not None
         return self._cache.access_token
 
     # ── Generic request helper ────────────────────────────────────────────────
@@ -221,7 +221,7 @@ class SauronApiClient:
             # credentials problem.  Let the coordinator surface UpdateFailed.
             raise SauronTransientError(f"Auth refresh failed: {err}") from err
 
-        assert self._cache is not None  # noqa: S101
+        assert self._cache is not None
         status2, body2 = await self._do_get(path, self._cache.access_token, params)
         if status2 in (401, 403):
             # A freshly-minted token was rejected → credentials really are dead.
@@ -248,7 +248,7 @@ class SauronApiClient:
                 if resp.status != 200:
                     raise SauronApiError(resp.status, await resp.text())
                 return resp.status, await resp.json()
-        except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+        except (TimeoutError, aiohttp.ClientError) as err:
             raise SauronTransientError(f"Network error on {path}: {err}") from err
 
     # ── Discovery ─────────────────────────────────────────────────────────────

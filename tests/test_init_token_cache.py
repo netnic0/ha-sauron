@@ -16,9 +16,6 @@ from __future__ import annotations
 
 import time
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
-
-import pytest
 
 # Import the integration module under test — using its package name
 # so the relative imports resolve against the stubbed homeassistant.
@@ -30,7 +27,6 @@ from custom_components.sauron.const import (
     HASS_DATA_OPTIONS_SNAPSHOT,
     TOKEN_REFRESH_MARGIN_S,
 )
-
 
 # ─── _hydrate_token_from_entry ───────────────────────────────────────────────
 

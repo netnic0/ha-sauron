@@ -11,15 +11,15 @@ from .exceptions import (
 from .models import ConsumptionPeriod, MeterInfo, MeterReading, SauronData
 
 __all__ = [
+    "ConsumptionPeriod",
+    "MeterInfo",
+    "MeterReading",
     "SauronApiClient",
     "SauronApiError",
     "SauronAuthError",
+    "SauronData",
     "SauronError",
     "SauronNoDataError",
     "SauronTransientError",
     "TokenCache",
-    "ConsumptionPeriod",
-    "MeterInfo",
-    "MeterReading",
-    "SauronData",
 ]

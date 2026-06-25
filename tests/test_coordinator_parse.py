@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 import pytest
 
+from custom_components.sauron.api.exceptions import SauronNoDataError
 from custom_components.sauron.coordinator import (
     _extract_daily_liters,
     _extract_period_m3,
@@ -13,8 +14,6 @@ from custom_components.sauron.coordinator import (
     _parse_consumption,
     _parse_last_index,
 )
-from custom_components.sauron.api.exceptions import SauronNoDataError
-
 
 _NOW = datetime(2026, 6, 16, 10, 0, 0, tzinfo=UTC)
 _SUB = "100030690002033754"
