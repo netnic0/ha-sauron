@@ -54,7 +54,6 @@ _config_entries.ConfigEntry = object  # type: ignore[attr-defined]
 _config_entries.ConfigFlow = object  # type: ignore[attr-defined]
 _config_entries.ConfigFlowResult = object  # type: ignore[attr-defined]
 _config_entries.OptionsFlow = object  # type: ignore[attr-defined]
-
 _const = sys.modules["homeassistant.const"]
 
 
@@ -77,7 +76,14 @@ _dreg = sys.modules["homeassistant.helpers.device_registry"]
 _dreg.DeviceInfo = dict  # type: ignore[attr-defined]
 
 _ireg = sys.modules["homeassistant.helpers.issue_registry"]
-_ireg.IssueSeverity = object  # type: ignore[attr-defined]
+
+
+class _IssueSeverity:
+    WARNING = "warning"
+    ERROR = "error"
+
+
+_ireg.IssueSeverity = _IssueSeverity  # type: ignore[attr-defined]
 _ireg.async_create_issue = lambda *a, **kw: None  # type: ignore[attr-defined]
 _ireg.async_delete_issue = lambda *a, **kw: None  # type: ignore[attr-defined]
 
@@ -88,6 +94,12 @@ _coord = sys.modules["homeassistant.helpers.update_coordinator"]
 
 
 class _GenericCoordinator:
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        # Accept any arguments — real DataUpdateCoordinator signature is
+        # large and evolves across HA versions; tests do not exercise it.
+        # Capture hass for completeness so subclasses can read self.hass.
+        self.hass = args[0] if args else None
+
     def __class_getitem__(cls, item: object) -> type:
         return cls
 
