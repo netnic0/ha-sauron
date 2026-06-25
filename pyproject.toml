@@ -3,7 +3,19 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 
 [tool.coverage.run]
-source = ["custom_components.sauron.api"]
+source = [
+    "custom_components.sauron.api",
+    "custom_components.sauron.coordinator",
+    "custom_components.sauron",
+]
+omit = [
+    # Entity / sensor layer is best covered by HA integration tests in core;
+    # unit testing it here would require pytest-homeassistant-custom-component.
+    "custom_components/sauron/sensor.py",
+    "custom_components/sauron/entity.py",
+    # Config flow exercises HA's flow manager — also best left to integration tests.
+    "custom_components/sauron/config_flow.py",
+]
 
 [tool.coverage.report]
 fail_under = 80
